@@ -1,26 +1,128 @@
 @import "tailwindcss";
 
+/* ========================================
+   Noctis Design System — PRD §6
+   Modern, calm, minimalist, activity-oriented
+   ======================================== */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Brand colors */
+  --noctis-background: #F7F8F6;
+  --noctis-surface: #FFFFFF;
+  --noctis-primary: #0F766E;
+  --noctis-primary-dark: #115E59;
+  --noctis-primary-light: #14B8A6;
+  --noctis-soft-accent: #E8F3EF;
+  --noctis-reminder-accent: #FFF1D6;
+  --noctis-text: #202923;
+  --noctis-muted: #69746C;
+
+  /* Semantic colors */
+  --noctis-danger: #DC2626;
+  --noctis-danger-light: #FEE2E2;
+  --noctis-warning: #D97706;
+  --noctis-warning-light: #FFF1D6;
+  --noctis-success: #16A34A;
+  --noctis-success-light: #DCFCE7;
+
+  /* Borders & shadows */
+  --noctis-border: #E2E5E0;
+  --noctis-border-focus: #0F766E;
+
+  /* Radius */
+  --noctis-radius-sm: 6px;
+  --noctis-radius: 10px;
+  --noctis-radius-lg: 14px;
+  --noctis-radius-xl: 20px;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Colors */
+  --color-background: var(--noctis-background);
+  --color-foreground: var(--noctis-text);
+  --color-surface: var(--noctis-surface);
+  --color-primary: var(--noctis-primary);
+  --color-primary-dark: var(--noctis-primary-dark);
+  --color-primary-light: var(--noctis-primary-light);
+  --color-soft-accent: var(--noctis-soft-accent);
+  --color-reminder-accent: var(--noctis-reminder-accent);
+  --color-muted: var(--noctis-muted);
+  --color-danger: var(--noctis-danger);
+  --color-danger-light: var(--noctis-danger-light);
+  --color-warning: var(--noctis-warning);
+  --color-warning-light: var(--noctis-warning-light);
+  --color-success: var(--noctis-success);
+  --color-success-light: var(--noctis-success-light);
+  --color-border: var(--noctis-border);
+  --color-border-focus: var(--noctis-border-focus);
+
+  /* Radius */
+  --radius-sm: var(--noctis-radius-sm);
+  --radius-DEFAULT: var(--noctis-radius);
+  --radius-lg: var(--noctis-radius-lg);
+  --radius-xl: var(--noctis-radius-xl);
+
+  /* Fonts */
+  --font-sans: var(--font-inter);
+
+  /* Shadows — subtle per PRD */
+  --shadow-card: 0 1px 3px 0 rgba(32, 41, 35, 0.04), 0 1px 2px -1px rgba(32, 41, 35, 0.04);
+  --shadow-dropdown: 0 4px 12px 0 rgba(32, 41, 35, 0.08);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* ========================================
+   Base styles
+   ======================================== */
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--noctis-background);
+  color: var(--noctis-text);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ========================================
+   Focus styles — accessible keyboard nav
+   ======================================== */
+
+*:focus-visible {
+  outline: 2px solid var(--noctis-primary);
+  outline-offset: 2px;
+  border-radius: var(--noctis-radius-sm);
+}
+
+/* ========================================
+   Scrollbar — subtle
+   ======================================== */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--noctis-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--noctis-muted);
+}
+
+/* ========================================
+   Transitions — micro-animations
+   ======================================== */
+
+@media (prefers-reduced-motion: no-preference) {
+  a, button, input, select, textarea,
+  [role="button"], [role="tab"] {
+    transition: color 0.15s ease, background-color 0.15s ease,
+      border-color 0.15s ease, box-shadow 0.15s ease,
+      transform 0.15s ease, opacity 0.15s ease;
+  }
 }
