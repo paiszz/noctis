@@ -25,19 +25,22 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Card, Badge, Button, priorityVariant } from "@/components/ui";
-import {
-  mockSchedules,
-  mockTasks as initialMockTasks,
-  mockAgendaEvents,
-  mockNotes,
-} from "@/lib/mock-data";
+import { useData } from "@/lib/data-context";
 import { toJakartaDate } from "@/lib/date";
 import { isOverdue, PRIORITY_LABELS } from "@/types";
 import type { DayOfWeek, CourseSchedule, Task, AgendaEvent, Note } from "@/types";
 
 export function DashboardContent() {
   const [now, setNow] = useState<Date>(() => toJakartaDate(new Date()));
-  const [tasks, setTasks] = useState<Task[]>(initialMockTasks);
+  const {
+    tasks,
+    toggleTaskStatus,
+    notes,
+    toggleNoteFavorite,
+    schedules,
+    agendaEvents,
+  } = useData();
+
 
   useEffect(() => {
     // Keep Asia/Jakarta time synchronized on client mount and update every minute
@@ -66,10 +69,10 @@ export function DashboardContent() {
   // ── Today Schedules ──
   const todaySchedules = useMemo(() => {
     const today = now.getDay() as DayOfWeek;
-    return mockSchedules
+    return schedules
       .filter((s) => s.day_of_week === today)
       .sort((a, b) => a.start_time.localeCompare(b.start_time));
-  }, [now]);
+  }, [schedules, now]);
 
   // ── Next Up Activity ──
   const nextUp = useMemo(() => {
@@ -85,7 +88,7 @@ export function DashboardContent() {
       };
     }
 
-    const upcoming = mockAgendaEvents
+    const upcoming = agendaEvents
       .filter((a) => new Date(a.start_at) >= now)
       .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
 
@@ -93,15 +96,16 @@ export function DashboardContent() {
       return {
         type: "Agenda",
         title: upcoming[0].title,
-        time: format(toJakartaDate(upcoming[0].start_at), "HH.mm - ") +
-          (upcoming[0].end_at ? format(toJakartaDate(upcoming[0].end_at), "HH.mm") : "Selesai"),
+        time:
+          format(toJakartaDate(upcoming[0].start_at), "HH:mm - ") +
+          (upcoming[0].end_at ? format(toJakartaDate(upcoming[0].end_at), "HH:mm") : "Selesai"),
         location: upcoming[0].location || "Ruang Rapat",
         href: "/agenda",
       };
     }
 
     return null;
-  }, [now, todaySchedules]);
+  }, [now, todaySchedules, agendaEvents]);
 
   // ── Task Metrics & Progress Ring ──
   const totalTasks = tasks.length;
@@ -110,13 +114,7 @@ export function DashboardContent() {
 
   // Toggle task status locally
   const toggleTask = (taskId: string) => {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskId
-          ? { ...t, status: t.status === "done" ? "todo" : "done" }
-          : t
-      )
-    );
+    toggleTaskStatus(taskId);
   };
 
   // Urgent tasks (todo or in_progress, overdue or due earliest)
@@ -136,22 +134,64 @@ export function DashboardContent() {
 
   // ── Agenda Events (Upcoming vs Completed) ──
   const upcomingEvents = useMemo(() => {
-    return mockAgendaEvents
-      .filter((a) => new Date(a.start_at) >= now)
+    return agendaEvents
+      .filter((a) => new Date(a.end_at || a.start_at) >= now)
+      .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
       .slice(0, 2);
-  }, [now]);
+  }, [agendaEvents, now]);
 
   const pastEvents = useMemo(() => {
-    return [
-      { id: "past-1", title: "Kegiatan UKM CCI", time: "Senin, 20 Okt · Kampus" },
-      { id: "past-2", title: "Bimbingan TA", time: "Jumat, 17 Okt · Ruang Dosen" },
-    ];
-  }, []);
+    return agendaEvents
+      .filter((a) => new Date(a.end_at || a.start_at) < now)
+      .sort((a, b) => new Date(b.start_at).getTime() - new Date(a.start_at).getTime())
+      .slice(0, 2);
+  }, [agendaEvents, now]);
+
+  // Unified Today's Activity timeline (Schedules + Agenda for today)
+  const todayActivities = useMemo(() => {
+    const list: Array<{
+      id: string;
+      title: string;
+      time: string;
+      color: string;
+      href: string;
+    }> = [];
+
+    todaySchedules.forEach((s, idx) => {
+      list.push({
+        id: `sched-${s.id}`,
+        title: s.course_name,
+        time: `${s.start_time} - ${s.end_time}`,
+        color: idx % 2 === 0 ? "bg-primary" : "bg-[#7A7AFF]",
+        href: "/calendar",
+      });
+    });
+
+    const todayStr = format(now, "yyyy-MM-dd");
+    agendaEvents.forEach((a) => {
+      const aStart = toJakartaDate(a.start_at);
+      if (format(aStart, "yyyy-MM-dd") === todayStr) {
+        list.push({
+          id: `agenda-${a.id}`,
+          title: a.title,
+          time:
+            format(aStart, "HH:mm") +
+            (a.end_at ? ` - ${format(toJakartaDate(a.end_at), "HH:mm")}` : ""),
+          color: "bg-[#00D589]",
+          href: "/agenda",
+        });
+      }
+    });
+
+    return list.slice(0, 3);
+  }, [todaySchedules, agendaEvents, now]);
 
   // ── Recent Notes ──
   const recentNotes = useMemo(() => {
-    return mockNotes.slice(0, 3);
-  }, []);
+    return notes.slice(0, 3);
+  }, [notes]);
+
+
 
   // Circular ring stroke offset
   const radius = 32;
@@ -266,14 +306,14 @@ export function DashboardContent() {
             <div className="my-2">
               <div className="flex items-baseline gap-2.5">
                 <span className="text-3xl font-extrabold text-foreground tracking-tight">
-                  {mockNotes.length}
+                  {notes.length}
                 </span>
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#E6FAF3] text-[#00D589]">
-                  +3
+                  +{notes.length}
                 </span>
               </div>
               <p className="text-[11px] text-muted font-medium mt-1">
-                new this week
+                total tersimpan
               </p>
             </div>
           </Card>
@@ -416,44 +456,30 @@ export function DashboardContent() {
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between p-2 rounded-xl hover:bg-surface-muted transition-colors">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-2 h-2 rounded-full bg-primary shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-foreground truncate">
-                      Kuliah Pemrograman
-                    </p>
-                    <p className="text-[11px] text-muted">10.00 - 12.00</p>
-                  </div>
+              {todayActivities.length === 0 ? (
+                <div className="py-4 text-center text-xs text-muted">
+                  Belum ada aktivitas hari ini.
                 </div>
-                <ChevronRight className="w-3.5 h-3.5 text-muted shrink-0" />
-              </div>
-
-              <div className="flex items-center justify-between p-2 rounded-xl hover:bg-surface-muted transition-colors">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-2 h-2 rounded-full bg-[#00D589] shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-foreground truncate">
-                      Praktikum Basis Data
-                    </p>
-                    <p className="text-[11px] text-muted">13.00 - 16.00</p>
-                  </div>
-                </div>
-                <ChevronRight className="w-3.5 h-3.5 text-muted shrink-0" />
-              </div>
-
-              <div className="flex items-center justify-between p-2 rounded-xl hover:bg-surface-muted transition-colors">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-2 h-2 rounded-full bg-[#7A7AFF] shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-foreground truncate">
-                      Rapat BEM
-                    </p>
-                    <p className="text-[11px] text-muted">18.00 - 20.00</p>
-                  </div>
-                </div>
-                <ChevronRight className="w-3.5 h-3.5 text-muted shrink-0" />
-              </div>
+              ) : (
+                todayActivities.map((act) => (
+                  <Link
+                    key={act.id}
+                    href={act.href}
+                    className="flex items-center justify-between p-2 rounded-xl hover:bg-surface-muted transition-colors group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${act.color}`} />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">
+                          {act.title}
+                        </p>
+                        <p className="text-[11px] text-muted">{act.time}</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-3.5 h-3.5 text-muted shrink-0 group-hover:text-primary transition-colors" />
+                  </Link>
+                ))
+              )}
             </div>
           </Card>
 
@@ -692,21 +718,31 @@ export function DashboardContent() {
                 Completed
               </p>
               <div className="space-y-2.5">
-                {pastEvents.map((item) => (
-                  <div key={item.id} className="flex items-start gap-2.5 p-2 rounded-xl opacity-75 hover:opacity-100 transition-opacity">
-                    <div className="w-3.5 h-3.5 rounded-full bg-[#EAEAF2] flex items-center justify-center text-muted mt-0.5 shrink-0">
-                      <Check className="w-2.5 h-2.5 stroke-[2.5]" />
+                {pastEvents.length === 0 ? (
+                  <p className="text-xs text-muted py-3">Belum ada agenda selesai.</p>
+                ) : (
+                  pastEvents.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-start gap-2.5 p-2 rounded-xl opacity-75 hover:opacity-100 transition-opacity"
+                    >
+                      <div className="w-3.5 h-3.5 rounded-full bg-[#EAEAF2] flex items-center justify-center text-muted mt-0.5 shrink-0">
+                        <Check className="w-2.5 h-2.5 stroke-[2.5]" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-foreground truncate">
+                          {item.title}
+                        </p>
+                        <p className="text-[11px] text-muted mt-0.5">
+                          {format(toJakartaDate(item.start_at), "dd MMM · HH:mm", {
+                            locale: localeId,
+                          })}
+                          {item.location && ` · ${item.location}`}
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-foreground truncate">
-                        {item.title}
-                      </p>
-                      <p className="text-[11px] text-muted mt-0.5">
-                        {item.time}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -729,40 +765,54 @@ export function DashboardContent() {
           </div>
 
           <div className="space-y-2.5 pt-1">
-            {recentNotes.map((n: Note) => (
-              <div
-                key={n.id}
-                className="flex items-center justify-between p-2.5 rounded-xl hover:bg-surface-muted transition-colors group"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div
-                    className={`w-2 h-2 rounded-full shrink-0 ${
-                      n.category === "Kuliah"
-                        ? "bg-primary"
-                        : n.category === "Karir"
-                        ? "bg-[#00D589]"
-                        : "bg-[#FFAB2E]"
-                    }`}
-                  />
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">
-                      {n.title}
-                    </p>
-                    <p className="text-[11px] text-muted mt-0.5">
-                      {format(toJakartaDate(n.updated_at), "dd MMM yyyy", { locale: localeId })} · {n.category || "General"}
-                    </p>
-                  </div>
-                </div>
+            {recentNotes.length === 0 ? (
+              <p className="text-xs text-muted py-4 text-center">Belum ada catatan.</p>
+            ) : (
+              recentNotes.map((n: Note) => (
+                <div
+                  key={n.id}
+                  className="flex items-center justify-between p-2.5 rounded-xl hover:bg-surface-muted transition-colors group"
+                >
+                  <Link
+                    href="/notes"
+                    className="flex items-center gap-2.5 min-w-0 flex-1"
+                  >
+                    <div
+                      className={`w-2 h-2 rounded-full shrink-0 ${
+                        n.category === "Kuliah"
+                          ? "bg-primary"
+                          : n.category === "Karir"
+                          ? "bg-[#00D589]"
+                          : "bg-[#FFAB2E]"
+                      }`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">
+                        {n.title}
+                      </p>
+                      <p className="text-[11px] text-muted mt-0.5">
+                        {format(toJakartaDate(n.updated_at), "dd MMM yyyy", { locale: localeId })} · {n.category || "General"}
+                      </p>
+                    </div>
+                  </Link>
 
-                <Star
-                  className={`w-3.5 h-3.5 shrink-0 transition-colors ${
-                    n.is_favorite
-                      ? "text-primary fill-primary"
-                      : "text-muted/40 hover:text-primary"
-                  }`}
-                />
-              </div>
-            ))}
+                  <button
+                    type="button"
+                    onClick={() => toggleNoteFavorite(n.id)}
+                    className="p-1 rounded-md hover:bg-soft-accent cursor-pointer shrink-0 ml-2"
+                    aria-label={n.is_favorite ? "Hapus dari favorit" : "Tambah ke favorit"}
+                  >
+                    <Star
+                      className={`w-3.5 h-3.5 shrink-0 transition-colors ${
+                        n.is_favorite
+                          ? "text-primary fill-primary"
+                          : "text-muted/40 hover:text-primary"
+                      }`}
+                    />
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </Card>
 

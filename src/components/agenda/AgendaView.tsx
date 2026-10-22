@@ -1,158 +1,386 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale/id";
-import { Plus, CalendarClock, Clock, MapPin } from "lucide-react";
-import { Card, Button, EmptyState } from "@/components/ui";
-import { mockAgendaEvents } from "@/lib/mock-data";
+import {
+  Plus,
+  CalendarClock,
+  Clock,
+  MapPin,
+  Edit2,
+  Trash2,
+  Bell,
+  Search,
+} from "lucide-react";
+import { Card, Badge, Button, EmptyState, Modal } from "@/components/ui";
+import { useData } from "@/lib/data-context";
 import { toJakartaDate } from "@/lib/date";
+import type { AgendaEvent } from "@/types";
+import { AgendaFormModal } from "./AgendaFormModal";
+import { toast } from "sonner";
 
 export function AgendaView() {
-  const [now, setNow] = useState<Date>(() => toJakartaDate(new Date()));
+  const { agendaEvents, deleteAgendaEvent } = useData();
 
-  useEffect(() => {
-    setNow(toJakartaDate(new Date()));
-  }, []);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [now] = useState<Date>(() => toJakartaDate(new Date()));
 
-  const sortedEvents = useMemo(() => {
-    return [...mockAgendaEvents].sort(
-      (a, b) =>
-        new Date(a.start_at).getTime() - new Date(b.start_at).getTime()
+  // Modal states
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingAgenda, setEditingAgenda] = useState<AgendaEvent | null>(null);
+  const [agendaToDelete, setAgendaToDelete] = useState<AgendaEvent | null>(null);
+
+  const filteredEvents = useMemo(() => {
+    let list = [...agendaEvents];
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(
+        (a) =>
+          a.title.toLowerCase().includes(q) ||
+          a.description?.toLowerCase().includes(q) ||
+          a.location?.toLowerCase().includes(q)
+      );
+    }
+
+    // Sort ascending by start_at
+    list.sort(
+      (a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime()
     );
-  }, []);
 
-  const upcoming = sortedEvents.filter(
-    (a) => new Date(a.start_at) >= now
-  );
-  const past = sortedEvents.filter(
-    (a) => new Date(a.start_at) < now
-  );
+    return list;
+  }, [agendaEvents, searchQuery]);
+
+  // Separate upcoming vs past accurately based on event end_at (or start_at if no end_at)
+  const upcoming = useMemo(() => {
+    return filteredEvents.filter((a) => {
+      const eventTime = a.end_at ? new Date(a.end_at) : new Date(a.start_at);
+      return eventTime >= now;
+    });
+  }, [filteredEvents, now]);
+
+  const past = useMemo(() => {
+    return filteredEvents
+      .filter((a) => {
+        const eventTime = a.end_at ? new Date(a.end_at) : new Date(a.start_at);
+        return eventTime < now;
+      })
+      .reverse(); // Most recently completed first
+  }, [filteredEvents, now]);
+
+  const handleOpenCreate = () => {
+    setEditingAgenda(null);
+    setIsFormOpen(true);
+  };
+
+  const handleOpenEdit = (event: AgendaEvent) => {
+    setEditingAgenda(event);
+    setIsFormOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (agendaToDelete) {
+      deleteAgendaEvent(agendaToDelete.id);
+      toast.success(`Agenda "${agendaToDelete.title}" telah dihapus.`);
+      setAgendaToDelete(null);
+    }
+  };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
+    <div className="max-w-4xl mx-auto space-y-5">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">Agenda</h2>
-          <p className="text-sm text-muted">
-            {upcoming.length} kegiatan mendatang
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Agenda Kegiatan
+          </h1>
+          <p className="text-sm text-muted mt-0.5">
+            {upcoming.length} kegiatan mendatang • {past.length} kegiatan selesai
           </p>
         </div>
-        <Button size="sm" icon={<Plus className="w-4 h-4" />}>
+        <Button
+          size="sm"
+          icon={<Plus className="w-4 h-4" />}
+          onClick={handleOpenCreate}
+        >
           Tambah Agenda
         </Button>
       </div>
 
-      {/* Upcoming */}
+      {/* Search Filter */}
+      <div className="relative">
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
+        <input
+          type="text"
+          placeholder="Cari agenda berdasarkan judul, lokasi, atau deskripsi..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full pl-10 pr-4 py-2 text-sm bg-surface border border-border/80 rounded-xl
+            text-foreground placeholder:text-muted shadow-sm
+            focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus"
+        />
+      </div>
+
+      {/* Empty State */}
       {upcoming.length === 0 && past.length === 0 ? (
         <Card>
           <EmptyState
             icon={CalendarClock}
-            title="Belum ada agenda"
-            description="Tambahkan rapat, kegiatan, atau acara yang akan datang."
+            title={searchQuery ? "Agenda tidak ditemukan" : "Belum ada agenda"}
+            description={
+              searchQuery
+                ? `Tidak ada agenda yang cocok dengan pencarian "${searchQuery}".`
+                : "Tambahkan rapat organisasi, webinar, bimbingan, atau kegiatan pribadi yang akan datang."
+            }
             action={
-              <Button size="sm" icon={<Plus className="w-4 h-4" />}>
-                Tambah Agenda
-              </Button>
+              !searchQuery ? (
+                <Button
+                  size="sm"
+                  icon={<Plus className="w-4 h-4" />}
+                  onClick={handleOpenCreate}
+                >
+                  Tambah Agenda
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSearchQuery("")}
+                >
+                  Reset Pencarian
+                </Button>
+              )
             }
           />
         </Card>
       ) : (
-        <>
+        <div className="space-y-6">
+          {/* Upcoming Events */}
           {upcoming.length > 0 && (
             <div className="space-y-3">
-              <h3 className="text-sm font-medium text-muted uppercase tracking-wider">
-                Mendatang
-              </h3>
-              {upcoming.map((event) => (
-                <Card key={event.id} hover>
-                  <div className="flex items-start gap-4">
-                    {/* Date badge */}
-                    <div className="w-14 h-14 rounded-xl bg-soft-accent flex flex-col items-center justify-center shrink-0">
-                      <span className="text-lg font-bold text-primary leading-none">
-                        {format(toJakartaDate(event.start_at), "dd")}
-                      </span>
-                      <span className="text-[10px] text-primary font-medium uppercase mt-0.5">
-                        {format(toJakartaDate(event.start_at), "MMM", {
-                          locale: localeId,
-                        })}
-                      </span>
-                    </div>
+              <h2 className="text-xs font-bold text-muted-dark uppercase tracking-wider flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-primary" />
+                <span>Mendatang ({upcoming.length})</span>
+              </h2>
 
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-foreground">
-                        {event.title}
-                      </h3>
-                      {event.description && (
-                        <p className="text-sm text-muted mt-0.5 line-clamp-2">
-                          {event.description}
-                        </p>
-                      )}
-                      <div className="flex items-center gap-3 mt-2 text-xs text-muted">
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {format(toJakartaDate(event.start_at), "HH:mm", {
-                            locale: localeId,
-                          })}
-                          {event.end_at &&
-                            ` — ${format(toJakartaDate(event.end_at), "HH:mm", {
-                              locale: localeId,
-                            })}`}
-                        </span>
-                        {event.location && (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
-                            {event.location}
+              <div className="space-y-2.5">
+                {upcoming.map((event) => {
+                  const startDate = toJakartaDate(event.start_at);
+                  const endDate = event.end_at ? toJakartaDate(event.end_at) : null;
+
+                  return (
+                    <Card
+                      key={event.id}
+                      hover
+                      padding="sm"
+                      className="group transition-all"
+                    >
+                      <div className="flex items-start gap-3 sm:gap-4">
+                        {/* Date badge */}
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-soft-accent to-[#ECE7FE] flex flex-col items-center justify-center shrink-0 border border-primary/20 shadow-sm">
+                          <span className="text-lg font-extrabold text-primary leading-none">
+                            {format(startDate, "dd")}
                           </span>
-                        )}
+                          <span className="text-[10px] text-primary font-bold uppercase mt-0.5">
+                            {format(startDate, "MMM", { locale: localeId })}
+                          </span>
+                        </div>
+
+                        {/* Event Content */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <h3 className="font-bold text-sm sm:text-base text-foreground leading-snug group-hover:text-primary transition-colors">
+                              {event.title}
+                            </h3>
+
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEdit(event)}
+                                className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-soft-accent transition-colors cursor-pointer"
+                                aria-label={`Edit ${event.title}`}
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setAgendaToDelete(event)}
+                                className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger-light transition-colors cursor-pointer"
+                                aria-label={`Hapus ${event.title}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {event.description && (
+                            <p className="text-xs text-muted-dark mt-1 line-clamp-2">
+                              {event.description}
+                            </p>
+                          )}
+
+                          <div className="flex items-center gap-3 mt-2 text-xs text-muted-dark flex-wrap">
+                            <span className="flex items-center gap-1 font-semibold text-primary">
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>
+                                {format(startDate, "HH:mm", { locale: localeId })}
+                                {endDate && ` — ${format(endDate, "HH:mm", { locale: localeId })}`}
+                              </span>
+                            </span>
+
+                            {event.location && (
+                              <span className="flex items-center gap-1 text-muted">
+                                <MapPin className="w-3.5 h-3.5" />
+                                <span>{event.location}</span>
+                              </span>
+                            )}
+
+                            {event.reminder_minutes !== undefined && (
+                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-soft-accent text-[11px] font-medium text-primary">
+                                <Bell className="w-3 h-3" />
+                                <span>
+                                  {event.reminder_minutes === 0
+                                    ? "Tepat waktu"
+                                    : `${event.reminder_minutes}m sblmnya`}
+                                </span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                </Card>
-              ))}
+                    </Card>
+                  );
+                })}
+              </div>
             </div>
           )}
 
+          {/* Past Events */}
           {past.length > 0 && (
-            <div className="space-y-3">
-              <h3 className="text-sm font-medium text-muted uppercase tracking-wider">
-                Selesai
-              </h3>
-              {past.map((event) => (
-                <Card key={event.id} className="opacity-60">
-                  <div className="flex items-start gap-4">
-                    <div className="w-14 h-14 rounded-xl bg-background flex flex-col items-center justify-center shrink-0">
-                      <span className="text-lg font-bold text-muted leading-none">
-                        {format(toJakartaDate(event.start_at), "dd")}
-                      </span>
-                      <span className="text-[10px] text-muted font-medium uppercase mt-0.5">
-                        {format(toJakartaDate(event.start_at), "MMM", {
-                          locale: localeId,
-                        })}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-muted">
-                        {event.title}
-                      </h3>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-muted">
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {format(toJakartaDate(event.start_at), "dd MMM, HH:mm", {
-                            locale: localeId,
-                          })}
-                        </span>
+            <div className="space-y-3 pt-2">
+              <h2 className="text-xs font-bold text-muted-dark uppercase tracking-wider flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-muted" />
+                <span>Selesai ({past.length})</span>
+              </h2>
+
+              <div className="space-y-2.5">
+                {past.map((event) => {
+                  const startDate = toJakartaDate(event.start_at);
+
+                  return (
+                    <Card
+                      key={event.id}
+                      padding="sm"
+                      className="opacity-75 hover:opacity-100 transition-opacity bg-surface-muted/60"
+                    >
+                      <div className="flex items-start gap-3 sm:gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-surface border border-border/80 flex flex-col items-center justify-center shrink-0">
+                          <span className="text-base font-bold text-muted-dark leading-none">
+                            {format(startDate, "dd")}
+                          </span>
+                          <span className="text-[9px] text-muted font-bold uppercase mt-0.5">
+                            {format(startDate, "MMM", { locale: localeId })}
+                          </span>
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <h3 className="font-semibold text-sm text-foreground">
+                              {event.title}
+                            </h3>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEdit(event)}
+                                className="p-1 rounded text-muted hover:text-primary transition-colors cursor-pointer"
+                                aria-label={`Edit ${event.title}`}
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setAgendaToDelete(event)}
+                                className="p-1 rounded text-muted hover:text-danger transition-colors cursor-pointer"
+                                aria-label={`Hapus ${event.title}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 mt-1 text-xs text-muted">
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {format(startDate, "dd MMM yyyy, HH:mm", {
+                                locale: localeId,
+                              })}
+                            </span>
+                            {event.location && (
+                              <span className="flex items-center gap-1 truncate">
+                                <MapPin className="w-3 h-3" />
+                                {event.location}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                </Card>
-              ))}
+                    </Card>
+                  );
+                })}
+              </div>
             </div>
           )}
-        </>
+        </div>
       )}
+
+      {/* Agenda Create / Edit Modal */}
+      <AgendaFormModal
+        isOpen={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        agendaToEdit={editingAgenda}
+        onDelete={(a) => setAgendaToDelete(a)}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={Boolean(agendaToDelete)}
+        onClose={() => setAgendaToDelete(null)}
+        title="Hapus Agenda"
+        description="Apakah kamu yakin ingin menghapus agenda kegiatan ini?"
+        maxWidth="sm"
+      >
+        <div className="space-y-4">
+          <div className="p-3 bg-surface-muted rounded-xl border border-border/80">
+            <p className="text-sm font-semibold text-foreground">
+              {agendaToDelete?.title}
+            </p>
+            {agendaToDelete?.location && (
+              <p className="text-xs text-muted mt-0.5">
+                📍 {agendaToDelete.location}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center justify-end gap-2.5 pt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAgendaToDelete(null)}
+            >
+              Batal
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={confirmDelete}
+            >
+              Hapus Agenda
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
