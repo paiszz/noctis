@@ -4,3 +4,5 @@ export * from "./note";
 export * from "./agenda";
 export * from "./reminder";
 export * from "./notification";
+export * from "./settings";
+

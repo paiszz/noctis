@@ -14,6 +14,7 @@ import {
   Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useData } from "@/lib/data-context";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -26,6 +27,9 @@ const navItems = [
 
 export function Navbar() {
   const pathname = usePathname();
+  const { profile } = useData();
+  const initial = profile?.name ? profile.name.trim()[0].toUpperCase() : "U";
+
 
   return (
     <header className="sticky top-0 z-30 w-full pt-3 sm:pt-4 px-4 sm:px-6 lg:px-8">
@@ -89,7 +93,7 @@ export function Navbar() {
             className="flex items-center gap-2 pl-1 sm:pl-2 border-l border-border/70 hover:opacity-90 transition-opacity"
           >
             <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary/20 to-primary/40 border-2 border-white shadow-sm flex items-center justify-center text-primary font-bold text-sm">
-              R
+              {initial}
             </div>
           </Link>
         </div>

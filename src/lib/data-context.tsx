@@ -16,7 +16,12 @@ import type {
   DayOfWeek,
   TaskPriority,
   TaskStatus,
+  UserProfile,
+  UserPreferences,
+  NotificationSettings,
+  NoctisExportData,
 } from "@/types";
+import type { ValidatedNoctisExport } from "@/lib/validation/import-schema";
 import {
   mockTasks as initialMockTasks,
   mockNotes as initialMockNotes,
@@ -28,8 +33,26 @@ const TASKS_STORAGE_KEY = "noctis_storage_tasks_v1";
 const NOTES_STORAGE_KEY = "noctis_storage_notes_v1";
 const SCHEDULES_STORAGE_KEY = "noctis_storage_schedules_v1";
 const AGENDA_STORAGE_KEY = "noctis_storage_agenda_v1";
+const PROFILE_STORAGE_KEY = "noctis_storage_profile_v1";
+const PREFERENCES_STORAGE_KEY = "noctis_storage_preferences_v1";
 
 const DEFAULT_USER_ID = "user-default";
+
+const DEFAULT_PROFILE: UserProfile = {
+  name: "Faiz",
+  email: "faiz@example.com",
+  title: "Personal Workspace",
+};
+
+const DEFAULT_PREFERENCES: UserPreferences = {
+  theme: "light",
+  timezone: "Asia/Jakarta",
+  notifications: {
+    course_schedule: true,
+    task_deadline: true,
+    agenda_event: false,
+  },
+};
 
 function generateId(prefix: string): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -101,6 +124,19 @@ interface DataContextType {
   updateAgendaEvent: (id: string, updates: Partial<Omit<AgendaEvent, "id" | "user_id">>) => void;
   deleteAgendaEvent: (id: string) => void;
 
+  // Profile
+  profile: UserProfile;
+  updateProfile: (updates: Partial<UserProfile>) => void;
+
+  // Preferences
+  preferences: UserPreferences;
+  updatePreferences: (updates: Partial<UserPreferences>) => void;
+  setNotificationPreference: (category: keyof NotificationSettings, enabled: boolean) => void;
+
+  // Data Management
+  exportAllData: () => NoctisExportData;
+  importAllData: (data: ValidatedNoctisExport) => void;
+
   isLoaded: boolean;
 }
 
@@ -111,9 +147,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [notes, setNotes] = useState<Note[]>(initialMockNotes);
   const [schedules, setSchedules] = useState<CourseSchedule[]>(initialMockSchedules);
   const [agendaEvents, setAgendaEvents] = useState<AgendaEvent[]>(initialMockAgendaEvents);
+  const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
+  const [preferences, setPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Initialize from localStorage on client mount
+  // Initialize from localStorage on client mount (safe from SSR hydration mismatch)
   useEffect(() => {
     try {
       const storedTasks = localStorage.getItem(TASKS_STORAGE_KEY);
@@ -143,12 +181,103 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       } else {
         localStorage.setItem(AGENDA_STORAGE_KEY, JSON.stringify(initialMockAgendaEvents));
       }
+
+      const storedProfile = localStorage.getItem(PROFILE_STORAGE_KEY);
+      if (storedProfile) {
+        setProfile(JSON.parse(storedProfile));
+      } else {
+        localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(DEFAULT_PROFILE));
+      }
+
+      const storedPrefs = localStorage.getItem(PREFERENCES_STORAGE_KEY);
+      if (storedPrefs) {
+        setPreferences(JSON.parse(storedPrefs));
+      } else {
+        localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(DEFAULT_PREFERENCES));
+      }
     } catch (err) {
       console.warn("Noctis: Could not read from localStorage, using fallback mock data.", err);
     } finally {
       setIsLoaded(true);
     }
   }, []);
+
+  // Synchronize theme to document element class list
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const root = document.documentElement;
+    const isDark =
+      preferences.theme === "dark" ||
+      (preferences.theme === "system" &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+    if (isDark) {
+      root.classList.add("dark");
+    } else {
+      root.classList.remove("dark");
+    }
+  }, [preferences.theme]);
+
+  // ── Profile Actions ──
+
+  const updateProfile = useCallback((updates: Partial<UserProfile>) => {
+    setProfile((prev) => {
+      const next = {
+        ...prev,
+        ...updates,
+        name: updates.name !== undefined ? updates.name.trim() : prev.name,
+        email: updates.email !== undefined ? updates.email.trim() : prev.email,
+        title: updates.title !== undefined ? updates.title.trim() : prev.title,
+      };
+      try {
+        localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(next));
+      } catch (e) {
+        console.warn("Error saving profile", e);
+      }
+      return next;
+    });
+  }, []);
+
+  // ── Preferences Actions ──
+
+  const updatePreferences = useCallback((updates: Partial<UserPreferences>) => {
+    setPreferences((prev) => {
+      const next = {
+        ...prev,
+        ...updates,
+        notifications: updates.notifications
+          ? { ...prev.notifications, ...updates.notifications }
+          : prev.notifications,
+      };
+      try {
+        localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(next));
+      } catch (e) {
+        console.warn("Error saving preferences", e);
+      }
+      return next;
+    });
+  }, []);
+
+  const setNotificationPreference = useCallback(
+    (category: keyof NotificationSettings, enabled: boolean) => {
+      setPreferences((prev) => {
+        const next = {
+          ...prev,
+          notifications: {
+            ...prev.notifications,
+            [category]: enabled,
+          },
+        };
+        try {
+          localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(next));
+        } catch (e) {
+          console.warn("Error saving notification preferences", e);
+        }
+        return next;
+      });
+    },
+    []
+  );
 
   // ── Task Actions ──
 
@@ -476,6 +605,64 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // ── Data Management (Export & Import) ──
+
+  const exportAllData = useCallback((): NoctisExportData => {
+    return {
+      version: "1.0.0",
+      app: "Noctis — Your Personal Productivity Space",
+      exported_at: new Date().toISOString(),
+      profile,
+      preferences,
+      data: {
+        tasks,
+        notes,
+        schedules,
+        agendaEvents,
+      },
+    };
+  }, [profile, preferences, tasks, notes, schedules, agendaEvents]);
+
+  const importAllData = useCallback((imported: ValidatedNoctisExport) => {
+    if (imported.data.tasks) {
+      setTasks(imported.data.tasks);
+      localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(imported.data.tasks));
+    }
+    if (imported.data.notes) {
+      setNotes(imported.data.notes);
+      localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(imported.data.notes));
+    }
+    if (imported.data.schedules) {
+      setSchedules(imported.data.schedules);
+      localStorage.setItem(SCHEDULES_STORAGE_KEY, JSON.stringify(imported.data.schedules));
+    }
+    if (imported.data.agendaEvents) {
+      setAgendaEvents(imported.data.agendaEvents);
+      localStorage.setItem(AGENDA_STORAGE_KEY, JSON.stringify(imported.data.agendaEvents));
+    }
+    if (imported.profile) {
+      const newProfile: UserProfile = {
+        name: imported.profile.name || DEFAULT_PROFILE.name,
+        email: imported.profile.email || DEFAULT_PROFILE.email,
+        title: imported.profile.title || DEFAULT_PROFILE.title,
+      };
+      setProfile(newProfile);
+      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(newProfile));
+    }
+    if (imported.preferences) {
+      const newPrefs: UserPreferences = {
+        theme: imported.preferences.theme || DEFAULT_PREFERENCES.theme,
+        timezone: imported.preferences.timezone || DEFAULT_PREFERENCES.timezone,
+        notifications: {
+          ...DEFAULT_PREFERENCES.notifications,
+          ...(imported.preferences.notifications || {}),
+        },
+      };
+      setPreferences(newPrefs);
+      localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(newPrefs));
+    }
+  }, []);
+
   const value = useMemo(
     () => ({
       tasks,
@@ -500,6 +687,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       updateAgendaEvent,
       deleteAgendaEvent,
 
+      profile,
+      updateProfile,
+
+      preferences,
+      updatePreferences,
+      setNotificationPreference,
+
+      exportAllData,
+      importAllData,
+
       isLoaded,
     }),
     [
@@ -521,6 +718,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       addAgendaEvent,
       updateAgendaEvent,
       deleteAgendaEvent,
+      profile,
+      updateProfile,
+      preferences,
+      updatePreferences,
+      setNotificationPreference,
+      exportAllData,
+      importAllData,
       isLoaded,
     ]
   );

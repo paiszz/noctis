@@ -29,6 +29,8 @@ import { useData } from "@/lib/data-context";
 import { toJakartaDate } from "@/lib/date";
 import { isOverdue, PRIORITY_LABELS } from "@/types";
 import type { DayOfWeek, CourseSchedule, Task, AgendaEvent, Note } from "@/types";
+import { toast } from "sonner";
+
 
 export function DashboardContent() {
   const [now, setNow] = useState<Date>(() => toJakartaDate(new Date()));
@@ -39,7 +41,11 @@ export function DashboardContent() {
     toggleNoteFavorite,
     schedules,
     agendaEvents,
+    profile,
+    exportAllData,
   } = useData();
+
+
 
 
   useEffect(() => {
@@ -198,13 +204,33 @@ export function DashboardContent() {
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (taskProgressPercent / 100) * circumference;
 
+  const handleExportData = () => {
+    try {
+      const exportData = exportAllData();
+      const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
+        JSON.stringify(exportData, null, 2)
+      )}`;
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.setAttribute("href", jsonString);
+      const dateStr = format(new Date(), "yyyy-MM-dd");
+      downloadAnchor.setAttribute("download", `noctis-backup-${dateStr}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+
+      toast.success("Laporan data berhasil diekspor.");
+    } catch {
+      toast.error("Gagal mengekspor data.");
+    }
+  };
+
   return (
     <div className="space-y-6 lg:space-y-7">
       {/* ── Dashboard Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
         <div>
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
-            {greeting}, Faiz.
+            {greeting}, {profile?.name || "Faiz"}.
           </h1>
           <p className="text-sm sm:text-base text-muted-dark font-medium mt-1">
             Keep going. Your goals are closer than you think.
@@ -223,11 +249,13 @@ export function DashboardContent() {
             size="md"
             icon={<Download className="w-4 h-4 text-muted-dark" />}
             className="text-xs sm:text-sm shadow-card"
+            onClick={handleExportData}
           >
             Export Report
           </Button>
         </div>
       </div>
+
 
       {/* ── Main Asymmetric 4-Column Grid ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-5 lg:gap-6 items-start">
@@ -577,7 +605,7 @@ export function DashboardContent() {
 
             <div className="relative z-10 space-y-3">
               <h2 className="text-lg sm:text-xl font-extrabold leading-snug">
-                Focus on what matters, Faiz.
+                Focus on what matters, {profile?.name || "Faiz"}.
               </h2>
               <p className="text-xs text-white/90 leading-relaxed max-w-[220px]">
                 Small steps every day lead to big results.
@@ -605,7 +633,7 @@ export function DashboardContent() {
                 <Moon className="w-5 h-5 fill-primary/20" />
               </div>
               <h3 className="font-bold text-xs sm:text-sm text-foreground">
-                You&apos;re doing great, Faiz.
+                You&apos;re doing great, {profile?.name || "Faiz"}.
               </h3>
               <p className="text-[11px] text-muted mt-0.5">
                 Stay consistent, keep going.

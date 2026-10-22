@@ -38,6 +38,45 @@
   --noctis-radius-2xl: 30px;
 }
 
+.dark {
+  --noctis-surface: #151522;
+  --noctis-surface-muted: #1B1B2C;
+  --noctis-text: #F4F4FD;
+  --noctis-muted: #8E8EA8;
+  --noctis-muted-dark: #A5A5C2;
+  --noctis-soft-accent: #262644;
+  --noctis-border: #2A2A40;
+  --noctis-border-soft: #202032;
+  --noctis-border-focus: #9B9BFF;
+  --noctis-danger-light: #381E27;
+  --noctis-warning-light: #382B1B;
+  --noctis-success-light: #16362C;
+}
+
+.dark body {
+  background-color: #0F0F19;
+  background-image:
+    radial-gradient(
+      ellipse 85% 480px at 50% -20px,
+      rgba(122, 122, 255, 0.18) 0%,
+      rgba(99, 102, 241, 0.08) 45%,
+      transparent 100%
+    ),
+    radial-gradient(
+      ellipse 55% 420px at 85% -10px,
+      rgba(135, 120, 255, 0.12) 0%,
+      transparent 100%
+    ),
+    linear-gradient(
+      180deg,
+      #18182A 0px,
+      #131320 200px,
+      #0F0F19 500px
+    );
+  color: var(--noctis-text);
+}
+
+
 @theme inline {
   /* Colors */
   --color-background: var(--noctis-surface-muted);
