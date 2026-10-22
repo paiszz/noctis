@@ -1,20 +1,17 @@
-import { Sidebar, MobileNav, Header } from "@/components/layout";
+import { Navbar, MobileNav } from "@/components/layout";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-full">
-      {/* Desktop sidebar */}
-      <Sidebar />
+    <div className="min-h-screen flex flex-col">
+      {/* Top Floating Navbar */}
+      <Navbar />
 
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col lg:pl-64">
-        <Header />
-        <main className="flex-1 px-4 py-6 lg:px-6 lg:py-8 pb-24 lg:pb-8">
-          {children}
-        </main>
-      </div>
+      {/* Main Content Area */}
+      <main className="flex-1 w-full max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 lg:py-8 pb-28 lg:pb-12">
+        {children}
+      </main>
 
-      {/* Mobile bottom nav */}
+      {/* Mobile Bottom Navigation */}
       <MobileNav />
     </div>
   );

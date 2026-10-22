@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 interface CardProps {
   children: React.ReactNode;
   className?: string;
-  padding?: "sm" | "md" | "lg";
+  padding?: "none" | "sm" | "md" | "lg";
   hover?: boolean;
 }
 
@@ -14,17 +14,18 @@ export function Card({
   hover = false,
 }: CardProps) {
   const paddings = {
-    sm: "p-3",
-    md: "p-4 lg:p-5",
-    lg: "p-5 lg:p-6",
+    none: "",
+    sm: "p-3 sm:p-4",
+    md: "p-4 sm:p-5 lg:p-6",
+    lg: "p-6 sm:p-7 lg:p-8",
   };
 
   return (
     <div
       className={cn(
-        "bg-surface rounded-xl border border-border shadow-card",
+        "bg-surface rounded-2xl lg:rounded-3xl border border-border/70 shadow-card transition-all duration-200",
         paddings[padding],
-        hover && "hover:border-primary/20 hover:shadow-dropdown cursor-pointer",
+        hover && "hover:border-primary/30 hover:shadow-card-hover hover:-translate-y-0.5 cursor-pointer",
         className
       )}
     >
@@ -49,9 +50,11 @@ export function CardHeader({
   return (
     <div className={cn("flex items-start justify-between gap-4 mb-4", className)}>
       <div>
-        <h2 className="font-semibold text-foreground">{title}</h2>
+        <h2 className="font-semibold text-base sm:text-lg text-foreground tracking-tight">
+          {title}
+        </h2>
         {description && (
-          <p className="text-sm text-muted mt-0.5">{description}</p>
+          <p className="text-xs sm:text-sm text-muted mt-0.5">{description}</p>
         )}
       </div>
       {action}
