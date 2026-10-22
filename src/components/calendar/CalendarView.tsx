@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format, addDays, startOfWeek } from "date-fns";
 import { id as localeId } from "date-fns/locale/id";
 import { ChevronLeft, ChevronRight, Plus, CalendarDays } from "lucide-react";
 import { Card, Badge, Button, EmptyState } from "@/components/ui";
 import { mockSchedules } from "@/lib/mock-data";
+import { toJakartaDate } from "@/lib/date";
 import { DAY_LABELS } from "@/types";
 import type { DayOfWeek, CourseSchedule } from "@/types";
 
@@ -18,9 +19,14 @@ function getSchedulesForDay(day: DayOfWeek): CourseSchedule[] {
 }
 
 export function CalendarView() {
-  const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
-  const [today] = useState<Date>(() => new Date());
+  const [currentDate, setCurrentDate] = useState<Date>(() => toJakartaDate(new Date()));
+  const [today, setToday] = useState<Date>(() => toJakartaDate(new Date()));
   const [view, setView] = useState<"day" | "week">("week");
+
+  useEffect(() => {
+    const jDate = toJakartaDate(new Date());
+    setToday(jDate);
+  }, []);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 }); // Monday
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -37,7 +43,7 @@ export function CalendarView() {
     );
   };
 
-  const goToday = () => setCurrentDate(new Date());
+  const goToday = () => setCurrentDate(toJakartaDate(new Date()));
 
 
   return (

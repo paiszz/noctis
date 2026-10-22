@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale/id";
 import {
@@ -20,6 +20,7 @@ import {
   mockTasks,
   mockAgendaEvents,
 } from "@/lib/mock-data";
+import { toJakartaDate } from "@/lib/date";
 import {
   DAY_LABELS,
   PRIORITY_LABELS,
@@ -43,13 +44,13 @@ function getTodaySchedules(now: Date): CourseSchedule[] {
     .sort((a, b) => a.start_time.localeCompare(b.start_time));
 }
 
-function getUrgentTasks(): Task[] {
+function getUrgentTasks(now: Date): Task[] {
   return mockTasks
     .filter((t) => t.status !== "done")
     .sort((a, b) => {
       // Overdue first, then by due date
-      const aOverdue = isOverdue(a);
-      const bOverdue = isOverdue(b);
+      const aOverdue = isOverdue(a, now);
+      const bOverdue = isOverdue(b, now);
       if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
       if (!a.due_at) return 1;
       if (!b.due_at) return -1;
@@ -86,7 +87,7 @@ function getNextUp(now: Date): { type: string; title: string; time: string; loca
     return {
       type: "Agenda",
       title: upcoming[0].title,
-      time: format(new Date(upcoming[0].start_at), "dd MMM, HH:mm", { locale: localeId }),
+      time: format(toJakartaDate(upcoming[0].start_at), "dd MMM, HH:mm", { locale: localeId }),
       location: upcoming[0].location,
     };
   }
@@ -126,12 +127,21 @@ function QuickActions() {
 // ── Main Dashboard ──
 
 export function DashboardContent() {
-  const [now] = useState<Date>(() => new Date());
+  const [now, setNow] = useState<Date>(() => toJakartaDate(new Date()));
+
+  useEffect(() => {
+    // Keep Asia/Jakarta time synchronized on client mount and update every minute
+    setNow(toJakartaDate(new Date()));
+    const timer = setInterval(() => {
+      setNow(toJakartaDate(new Date()));
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   const todayDate = format(now, "EEEE, dd MMMM yyyy", { locale: localeId });
   const greeting = getGreeting(now);
   const todaySchedules = getTodaySchedules(now);
-  const urgentTasks = getUrgentTasks();
+  const urgentTasks = getUrgentTasks(now);
   const upcomingAgenda = getUpcomingAgenda(now);
   const nextUp = getNextUp(now);
 
@@ -246,7 +256,7 @@ export function DashboardContent() {
           ) : (
             <div className="space-y-3">
               {urgentTasks.map((t) => {
-                const overdue = isOverdue(t);
+                const overdue = isOverdue(t, now);
                 return (
                   <div
                     key={t.id}
@@ -271,7 +281,7 @@ export function DashboardContent() {
                             }`}
                           >
                             {overdue && <AlertTriangle className="w-3 h-3" />}
-                            {overdue ? "Terlambat" : format(new Date(t.due_at), "dd MMM", { locale: localeId })}
+                            {overdue ? "Terlambat" : format(toJakartaDate(t.due_at), "dd MMM", { locale: localeId })}
                           </span>
                         )}
                         <Badge variant={priorityVariant(t.priority)}>
@@ -324,7 +334,7 @@ export function DashboardContent() {
                   <div className="mt-2 space-y-1 text-xs text-muted">
                     <p className="flex items-center gap-1">
                       <Clock className="w-3 h-3" />
-                      {format(new Date(a.start_at), "dd MMM, HH:mm", { locale: localeId })}
+                      {format(toJakartaDate(a.start_at), "dd MMM, HH:mm", { locale: localeId })}
                     </p>
                     {a.location && <p>📍 {a.location}</p>}
                   </div>

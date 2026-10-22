@@ -5,6 +5,8 @@ import type {
   AgendaEvent,
 } from "@/types";
 
+import { getJakartaBaseDate, toJakartaISOString } from "@/lib/date";
+
 // ================================================
 // Mock Data for Noctis — Fase 0–3 Development
 // Data contoh untuk render UI tanpa database.
@@ -12,20 +14,18 @@ import type {
 // ================================================
 
 const USER_ID = "mock-user-001";
-const now = new Date();
+const baseJakarta = getJakartaBaseDate();
 
-function toISODate(daysOffset: number): string {
-  const d = new Date(now);
-  d.setDate(d.getDate() + daysOffset);
-  return d.toISOString();
+function toISODate(daysOffset: number, timeStr = "08:00"): string {
+  return toJakartaISOString(daysOffset, timeStr);
 }
 
 function todayDayOfWeek(): 0 | 1 | 2 | 3 | 4 | 5 | 6 {
-  return now.getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  return baseJakarta.dayOfWeek;
 }
 
 function nextDay(offset: number): 0 | 1 | 2 | 3 | 4 | 5 | 6 {
-  return ((now.getDay() + offset) % 7) as 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  return ((baseJakarta.dayOfWeek + offset) % 7) as 0 | 1 | 2 | 3 | 4 | 5 | 6;
 }
 
 // ── Jadwal Kuliah ──
@@ -106,41 +106,41 @@ export const mockTasks: Task[] = [
     user_id: USER_ID,
     title: "Tugas Praktikum Web — Modul 5",
     description: "Implementasi CRUD dengan Next.js dan Supabase.",
-    due_at: toISODate(2),
+    due_at: toISODate(2, "23:59"),
     priority: "high",
     status: "in_progress",
     course_schedule_id: "sched-001",
-    created_at: toISODate(-5),
-    updated_at: toISODate(-1),
+    created_at: toISODate(-5, "08:00"),
+    updated_at: toISODate(-1, "10:00"),
   },
   {
     id: "task-002",
     user_id: USER_ID,
     title: "Laporan Basis Data — ER Diagram",
     description: "Buat ER diagram untuk studi kasus perpustakaan.",
-    due_at: toISODate(5),
+    due_at: toISODate(5, "23:59"),
     priority: "medium",
     status: "todo",
     course_schedule_id: "sched-002",
-    created_at: toISODate(-3),
-    updated_at: toISODate(-3),
+    created_at: toISODate(-3, "09:00"),
+    updated_at: toISODate(-3, "09:00"),
   },
   {
     id: "task-003",
     user_id: USER_ID,
     title: "Tugas Kalkulus — Integral Lipat Dua",
-    due_at: toISODate(-1), // overdue
+    due_at: toISODate(-1, "23:59"), // overdue
     priority: "high",
     status: "todo",
     course_schedule_id: "sched-003",
-    created_at: toISODate(-7),
-    updated_at: toISODate(-7),
+    created_at: toISODate(-7, "08:00"),
+    updated_at: toISODate(-7, "08:00"),
   },
   {
     id: "task-004",
     user_id: USER_ID,
     title: "Review materi UTS Sistem Operasi",
-    due_at: toISODate(10),
+    due_at: toISODate(10, "23:59"),
     priority: "low",
     status: "todo",
     course_schedule_id: "sched-004",
@@ -215,31 +215,32 @@ export const mockAgendaEvents: AgendaEvent[] = [
     user_id: USER_ID,
     title: "Rapat Organisasi BEM",
     description: "Bahas acara Dies Natalis.",
-    start_at: toISODate(1),
-    end_at: toISODate(1),
+    start_at: toISODate(1, "13:00"),
+    end_at: toISODate(1, "15:00"),
     location: "Sekretariat BEM",
-    created_at: toISODate(-7),
-    updated_at: toISODate(-7),
+    created_at: toISODate(-7, "09:00"),
+    updated_at: toISODate(-7, "09:00"),
   },
   {
     id: "agenda-002",
     user_id: USER_ID,
     title: "Belajar kelompok Kalkulus",
-    start_at: toISODate(3),
-    end_at: toISODate(3),
+    start_at: toISODate(3, "15:30"),
+    end_at: toISODate(3, "17:00"),
     location: "Perpustakaan Lantai 2",
-    created_at: toISODate(-4),
-    updated_at: toISODate(-4),
+    created_at: toISODate(-4, "10:00"),
+    updated_at: toISODate(-4, "10:00"),
   },
   {
     id: "agenda-003",
     user_id: USER_ID,
     title: "Workshop Git & GitHub",
     description: "Workshop internal lab tentang version control.",
-    start_at: toISODate(5),
+    start_at: toISODate(5, "09:00"),
+    end_at: toISODate(5, "11:30"),
     location: "Lab Komputer 2",
-    created_at: toISODate(-2),
-    updated_at: toISODate(-2),
+    created_at: toISODate(-2, "08:30"),
+    updated_at: toISODate(-2, "08:30"),
   },
 ];
 

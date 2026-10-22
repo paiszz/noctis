@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Card, Badge, Button, EmptyState } from "@/components/ui";
 import { mockNotes, getMockNoteCategories } from "@/lib/mock-data";
+import { toJakartaDate } from "@/lib/date";
 
 export function NotesView() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -174,7 +175,7 @@ export function NotesView() {
                   <Badge variant="default">{note.category}</Badge>
                 )}
                 <span className="text-[10px] text-muted">
-                  {format(new Date(note.updated_at), "dd MMM yyyy", {
+                  {format(toJakartaDate(note.updated_at), "dd MMM yyyy", {
                     locale: localeId,
                   })}
                 </span>

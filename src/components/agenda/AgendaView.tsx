@@ -1,14 +1,19 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale/id";
 import { Plus, CalendarClock, Clock, MapPin } from "lucide-react";
 import { Card, Button, EmptyState } from "@/components/ui";
 import { mockAgendaEvents } from "@/lib/mock-data";
+import { toJakartaDate } from "@/lib/date";
 
 export function AgendaView() {
-  const [now] = useState<Date>(() => new Date());
+  const [now, setNow] = useState<Date>(() => toJakartaDate(new Date()));
+
+  useEffect(() => {
+    setNow(toJakartaDate(new Date()));
+  }, []);
 
   const sortedEvents = useMemo(() => {
     return [...mockAgendaEvents].sort(
@@ -66,10 +71,10 @@ export function AgendaView() {
                     {/* Date badge */}
                     <div className="w-14 h-14 rounded-xl bg-soft-accent flex flex-col items-center justify-center shrink-0">
                       <span className="text-lg font-bold text-primary leading-none">
-                        {format(new Date(event.start_at), "dd")}
+                        {format(toJakartaDate(event.start_at), "dd")}
                       </span>
                       <span className="text-[10px] text-primary font-medium uppercase mt-0.5">
-                        {format(new Date(event.start_at), "MMM", {
+                        {format(toJakartaDate(event.start_at), "MMM", {
                           locale: localeId,
                         })}
                       </span>
@@ -88,11 +93,11 @@ export function AgendaView() {
                       <div className="flex items-center gap-3 mt-2 text-xs text-muted">
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3" />
-                          {format(new Date(event.start_at), "HH:mm", {
+                          {format(toJakartaDate(event.start_at), "HH:mm", {
                             locale: localeId,
                           })}
                           {event.end_at &&
-                            ` — ${format(new Date(event.end_at), "HH:mm", {
+                            ` — ${format(toJakartaDate(event.end_at), "HH:mm", {
                               locale: localeId,
                             })}`}
                         </span>
@@ -120,10 +125,10 @@ export function AgendaView() {
                   <div className="flex items-start gap-4">
                     <div className="w-14 h-14 rounded-xl bg-background flex flex-col items-center justify-center shrink-0">
                       <span className="text-lg font-bold text-muted leading-none">
-                        {format(new Date(event.start_at), "dd")}
+                        {format(toJakartaDate(event.start_at), "dd")}
                       </span>
                       <span className="text-[10px] text-muted font-medium uppercase mt-0.5">
-                        {format(new Date(event.start_at), "MMM", {
+                        {format(toJakartaDate(event.start_at), "MMM", {
                           locale: localeId,
                         })}
                       </span>
@@ -135,7 +140,7 @@ export function AgendaView() {
                       <div className="flex items-center gap-3 mt-1 text-xs text-muted">
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3" />
-                          {format(new Date(event.start_at), "dd MMM, HH:mm", {
+                          {format(toJakartaDate(event.start_at), "dd MMM, HH:mm", {
                             locale: localeId,
                           })}
                         </span>

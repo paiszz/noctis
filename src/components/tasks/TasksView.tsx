@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale/id";
 import {
@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Card, Badge, Button, EmptyState, priorityVariant } from "@/components/ui";
 import { mockTasks } from "@/lib/mock-data";
+import { toJakartaDate } from "@/lib/date";
 import {
   PRIORITY_LABELS,
   STATUS_LABELS,
@@ -33,7 +34,11 @@ const STATUS_FILTERS: { value: FilterStatus; label: string }[] = [
 export function TasksView() {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [now] = useState<Date>(() => new Date());
+  const [now, setNow] = useState<Date>(() => toJakartaDate(new Date()));
+
+  useEffect(() => {
+    setNow(toJakartaDate(new Date()));
+  }, []);
 
   const filteredTasks = useMemo(() => {
     let tasks = [...mockTasks];
@@ -221,7 +226,7 @@ export function TasksView() {
                           )}
                           {overdue
                             ? "Terlambat"
-                            : format(new Date(t.due_at), "dd MMM yyyy", {
+                            : format(toJakartaDate(t.due_at), "dd MMM yyyy", {
                                 locale: localeId,
                               })}
                         </span>
