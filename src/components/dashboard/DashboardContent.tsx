@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale/id";
 import {
@@ -27,16 +28,16 @@ import {
 } from "@/types";
 import type { DayOfWeek, CourseSchedule, Task, AgendaEvent } from "@/types";
 
-function getGreeting(): string {
-  const hour = new Date().getHours();
+function getGreeting(now: Date): string {
+  const hour = now.getHours();
   if (hour < 12) return "Selamat Pagi";
   if (hour < 17) return "Selamat Siang";
   if (hour < 19) return "Selamat Sore";
   return "Selamat Malam";
 }
 
-function getTodaySchedules(): CourseSchedule[] {
-  const today = new Date().getDay() as DayOfWeek;
+function getTodaySchedules(now: Date): CourseSchedule[] {
+  const today = now.getDay() as DayOfWeek;
   return mockSchedules
     .filter((s) => s.day_of_week === today)
     .sort((a, b) => a.start_time.localeCompare(b.start_time));
@@ -57,20 +58,18 @@ function getUrgentTasks(): Task[] {
     .slice(0, 4);
 }
 
-function getUpcomingAgenda(): AgendaEvent[] {
-  const now = new Date();
+function getUpcomingAgenda(now: Date): AgendaEvent[] {
   return mockAgendaEvents
     .filter((a) => new Date(a.start_at) >= now)
     .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
     .slice(0, 3);
 }
 
-function getNextUp(): { type: string; title: string; time: string; location?: string } | null {
-  const now = new Date();
+function getNextUp(now: Date): { type: string; title: string; time: string; location?: string } | null {
   const currentTime = format(now, "HH:mm");
 
   // Check today's schedules
-  const todaySchedules = getTodaySchedules();
+  const todaySchedules = getTodaySchedules(now);
   const nextSchedule = todaySchedules.find((s) => s.start_time > currentTime);
   if (nextSchedule) {
     return {
@@ -82,7 +81,7 @@ function getNextUp(): { type: string; title: string; time: string; location?: st
   }
 
   // Check upcoming agenda
-  const upcoming = getUpcomingAgenda();
+  const upcoming = getUpcomingAgenda(now);
   if (upcoming.length > 0) {
     return {
       type: "Agenda",
@@ -127,12 +126,14 @@ function QuickActions() {
 // ── Main Dashboard ──
 
 export function DashboardContent() {
-  const todayDate = format(new Date(), "EEEE, dd MMMM yyyy", { locale: localeId });
-  const greeting = getGreeting();
-  const todaySchedules = getTodaySchedules();
+  const [now] = useState<Date>(() => new Date());
+
+  const todayDate = format(now, "EEEE, dd MMMM yyyy", { locale: localeId });
+  const greeting = getGreeting(now);
+  const todaySchedules = getTodaySchedules(now);
   const urgentTasks = getUrgentTasks();
-  const upcomingAgenda = getUpcomingAgenda();
-  const nextUp = getNextUp();
+  const upcomingAgenda = getUpcomingAgenda(now);
+  const nextUp = getNextUp(now);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">

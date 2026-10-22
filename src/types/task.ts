@@ -28,7 +28,7 @@ export interface Task {
 }
 
 /** Computed at display time — not stored in DB */
-export function isOverdue(task: Task): boolean {
+export function isOverdue(task: Task, now: Date = new Date()): boolean {
   if (task.status === "done" || !task.due_at) return false;
-  return new Date(task.due_at) < new Date();
+  return new Date(task.due_at) < now;
 }

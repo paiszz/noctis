@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale/id";
 import { Plus, CalendarClock, Clock, MapPin } from "lucide-react";
@@ -8,6 +8,8 @@ import { Card, Button, EmptyState } from "@/components/ui";
 import { mockAgendaEvents } from "@/lib/mock-data";
 
 export function AgendaView() {
+  const [now] = useState<Date>(() => new Date());
+
   const sortedEvents = useMemo(() => {
     return [...mockAgendaEvents].sort(
       (a, b) =>
@@ -16,10 +18,10 @@ export function AgendaView() {
   }, []);
 
   const upcoming = sortedEvents.filter(
-    (a) => new Date(a.start_at) >= new Date()
+    (a) => new Date(a.start_at) >= now
   );
   const past = sortedEvents.filter(
-    (a) => new Date(a.start_at) < new Date()
+    (a) => new Date(a.start_at) < now
   );
 
   return (

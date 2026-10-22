@@ -33,6 +33,7 @@ const STATUS_FILTERS: { value: FilterStatus; label: string }[] = [
 export function TasksView() {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [now] = useState<Date>(() => new Date());
 
   const filteredTasks = useMemo(() => {
     let tasks = [...mockTasks];
@@ -49,7 +50,7 @@ export function TasksView() {
 
     // Filter
     if (filterStatus === "overdue") {
-      tasks = tasks.filter((t) => isOverdue(t));
+      tasks = tasks.filter((t) => isOverdue(t, now));
     } else if (filterStatus !== "all") {
       tasks = tasks.filter((t) => t.status === filterStatus);
     }
@@ -62,8 +63,8 @@ export function TasksView() {
     };
 
     tasks.sort((a, b) => {
-      const aOverdue = isOverdue(a);
-      const bOverdue = isOverdue(b);
+      const aOverdue = isOverdue(a, now);
+      const bOverdue = isOverdue(b, now);
       if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
       if (a.priority !== b.priority)
         return priorityOrder[a.priority] - priorityOrder[b.priority];
@@ -73,7 +74,7 @@ export function TasksView() {
     });
 
     return tasks;
-  }, [filterStatus, searchQuery]);
+  }, [filterStatus, searchQuery, now]);
 
   const counts = useMemo(
     () => ({
@@ -81,9 +82,9 @@ export function TasksView() {
       todo: mockTasks.filter((t) => t.status === "todo").length,
       in_progress: mockTasks.filter((t) => t.status === "in_progress").length,
       done: mockTasks.filter((t) => t.status === "done").length,
-      overdue: mockTasks.filter((t) => isOverdue(t)).length,
+      overdue: mockTasks.filter((t) => isOverdue(t, now)).length,
     }),
-    []
+    [now]
   );
 
   return (

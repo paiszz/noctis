@@ -18,7 +18,8 @@ function getSchedulesForDay(day: DayOfWeek): CourseSchedule[] {
 }
 
 export function CalendarView() {
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
+  const [today] = useState<Date>(() => new Date());
   const [view, setView] = useState<"day" | "week">("week");
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 }); // Monday
@@ -38,7 +39,6 @@ export function CalendarView() {
 
   const goToday = () => setCurrentDate(new Date());
 
-  const today = new Date();
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
