@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node scripts/test-agenda-categorization.mjs"
+    "test": "node scripts/test-agenda-categorization.mjs && node --experimental-strip-types scripts/test-import-validation.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

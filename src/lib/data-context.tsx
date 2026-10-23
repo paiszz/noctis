@@ -195,7 +195,7 @@ interface DataContextType {
 
   // Data Management
   exportAllData: () => NoctisExportData;
-  importAllData: (data: ValidatedNoctisExport) => void;
+  importAllData: (data: ValidatedNoctisExport) => Promise<void>;
 
   // Granular Loading States
   isAuthLoading: boolean;
@@ -1534,165 +1534,365 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [profile, preferences, tasks, notes, schedules, agendaEvents]);
 
   const importAllData = useCallback(
-    (imported: ValidatedNoctisExport) => {
-      const currentUserId = user?.id;
-
-      if (imported.data.tasks) {
-        if (user) {
-          // Re-map tasks with active user's UUID
-          const sanitizedTasks = imported.data.tasks.map((t) => ({
-            ...t,
-            user_id: user.id,
-          }));
-          setTasks(sanitizedTasks);
-          const key = getScopedStorageKey(user.id, "tasks");
-          localStorage.setItem(key, JSON.stringify(sanitizedTasks));
-
-          // Sync each imported task to Supabase
-          for (const t of sanitizedTasks) {
-            createUserTask(user.id, {
-              title: t.title,
-              description: t.description,
-              due_at: t.due_at,
-              priority: t.priority,
-              status: t.status,
-              course_schedule_id: t.course_schedule_id,
-            }).catch((err) =>
-              console.error("Error importing task to Supabase:", err)
-            );
-          }
-        } else {
-          setTasks(imported.data.tasks);
-          localStorage.setItem(LEGACY_STORAGE_KEYS.tasks, JSON.stringify(imported.data.tasks));
-        }
-      }
-
-      if (imported.data.schedules) {
-        if (user) {
-          // Re-map schedules with active user's UUID
-          const sanitizedSchedules = imported.data.schedules.map((s) => ({
-            ...s,
-            user_id: user.id,
+    async (imported: ValidatedNoctisExport): Promise<void> => {
+      if (!user) {
+        // ── GUEST MODE ──
+        if (imported.data.schedules) {
+          const sanitizedSchedules: CourseSchedule[] = imported.data.schedules.map((s) => ({
+            id: s.id || generateId("sched"),
+            user_id: DEFAULT_USER_ID,
+            course_name: s.course_name,
+            course_code: s.course_code,
+            day_of_week: s.day_of_week as DayOfWeek,
+            start_time: s.start_time,
+            end_time: s.end_time,
+            location: s.location,
+            recurrence_rule: s.recurrence_rule,
+            start_date: s.start_date,
+            end_date: s.end_date,
+            created_at: s.created_at || new Date().toISOString(),
+            updated_at: s.updated_at || new Date().toISOString(),
           }));
           setSchedules(sanitizedSchedules);
-          const key = getScopedStorageKey(user.id, "schedules");
-          localStorage.setItem(key, JSON.stringify(sanitizedSchedules));
+          try {
+            localStorage.setItem(
+              LEGACY_STORAGE_KEYS.schedules,
+              JSON.stringify(sanitizedSchedules)
+            );
+          } catch (e) {
+            console.warn("Error saving guest schedules", e);
+          }
+        }
 
-          // Sync each imported schedule to Supabase
-          for (const s of sanitizedSchedules) {
-            createUserSchedule(user.id, {
+        if (imported.data.tasks) {
+          const sanitizedTasks: Task[] = imported.data.tasks.map((t) => ({
+            id: t.id || generateId("task"),
+            user_id: DEFAULT_USER_ID,
+            title: t.title,
+            description: t.description,
+            due_at: t.due_at,
+            priority: t.priority as TaskPriority,
+            status: t.status as TaskStatus,
+            course_schedule_id: t.course_schedule_id,
+            created_at: t.created_at || new Date().toISOString(),
+            updated_at: t.updated_at || new Date().toISOString(),
+          }));
+          setTasks(sanitizedTasks);
+          try {
+            localStorage.setItem(
+              LEGACY_STORAGE_KEYS.tasks,
+              JSON.stringify(sanitizedTasks)
+            );
+          } catch (e) {
+            console.warn("Error saving guest tasks", e);
+          }
+        }
+
+        if (imported.data.notes) {
+          const sanitizedNotes: Note[] = imported.data.notes.map((n) => ({
+            id: n.id || generateId("note"),
+            user_id: DEFAULT_USER_ID,
+            title: n.title,
+            content: n.content,
+            category: n.category,
+            tags: n.tags || [],
+            is_favorite: Boolean(n.is_favorite),
+            created_at: n.created_at || new Date().toISOString(),
+            updated_at: n.updated_at || new Date().toISOString(),
+          }));
+          setNotes(sanitizedNotes);
+          try {
+            localStorage.setItem(
+              LEGACY_STORAGE_KEYS.notes,
+              JSON.stringify(sanitizedNotes)
+            );
+          } catch (e) {
+            console.warn("Error saving guest notes", e);
+          }
+        }
+
+        if (imported.data.agendaEvents) {
+          const sanitizedEvents: AgendaEvent[] = imported.data.agendaEvents.map((a) => ({
+            id: a.id || generateId("agenda"),
+            user_id: DEFAULT_USER_ID,
+            title: a.title,
+            description: a.description,
+            start_at: a.start_at,
+            end_at: a.end_at,
+            location: a.location,
+            reminder_minutes: a.reminder_minutes,
+            created_at: a.created_at || new Date().toISOString(),
+            updated_at: a.updated_at || new Date().toISOString(),
+          }));
+          setAgendaEvents(sanitizedEvents);
+          try {
+            localStorage.setItem(
+              LEGACY_STORAGE_KEYS.agenda,
+              JSON.stringify(sanitizedEvents)
+            );
+          } catch (e) {
+            console.warn("Error saving guest agenda", e);
+          }
+        }
+
+        if (imported.profile) {
+          const newProfile: UserProfile = {
+            name: imported.profile.name || DEFAULT_GUEST_PROFILE.name,
+            email: imported.profile.email || DEFAULT_GUEST_PROFILE.email,
+            title: imported.profile.title || DEFAULT_GUEST_PROFILE.title,
+          };
+          setProfile(newProfile);
+          try {
+            localStorage.setItem(
+              LEGACY_STORAGE_KEYS.profile,
+              JSON.stringify(newProfile)
+            );
+          } catch (e) {
+            console.warn("Error saving guest profile", e);
+          }
+        }
+
+        if (imported.preferences) {
+          const newPrefs: UserPreferences = {
+            theme: imported.preferences.theme || DEFAULT_PREFERENCES.theme,
+            timezone: imported.preferences.timezone || DEFAULT_PREFERENCES.timezone,
+            notifications: {
+              ...DEFAULT_PREFERENCES.notifications,
+              ...(imported.preferences.notifications || {}),
+            },
+          };
+          setPreferences(newPrefs);
+          try {
+            localStorage.setItem(
+              LEGACY_STORAGE_KEYS.preferences,
+              JSON.stringify(newPrefs)
+            );
+          } catch (e) {
+            console.warn("Error saving guest preferences", e);
+          }
+        }
+
+        return;
+      }
+
+      // ── AUTHENTICATED USER MODE ──
+      const scheduleIdMap = new Map<string, string>();
+      const insertedSchedules: CourseSchedule[] = [];
+      const insertedTasks: Task[] = [];
+      const insertedNotes: Note[] = [];
+      const insertedAgendaEvents: AgendaEvent[] = [];
+      const importErrors: string[] = [];
+
+      // 1. Impor Schedules TERLEBIH DAHULU agar UUID baru dari database tersedia untuk dipetakan ke Tasks
+      if (imported.data.schedules && imported.data.schedules.length > 0) {
+        for (const s of imported.data.schedules) {
+          try {
+            const res = await createUserSchedule(user.id, {
               course_name: s.course_name,
               course_code: s.course_code,
-              day_of_week: s.day_of_week,
+              day_of_week: s.day_of_week as DayOfWeek,
               start_time: s.start_time,
               end_time: s.end_time,
               location: s.location,
               recurrence_rule: s.recurrence_rule,
               start_date: s.start_date,
               end_date: s.end_date,
-            }).catch((err) =>
-              console.error("Error importing schedule to Supabase:", err)
-            );
+            });
+
+            if (res.data) {
+              // Simpan pemetaan ID jadwal lama (misal "sched-001" atau UUID lama) ke UUID baru dari Supabase
+              scheduleIdMap.set(s.id, res.data.id);
+              insertedSchedules.push(res.data);
+            } else {
+              const msg = res.error?.message || "Gagal menyimpan jadwal kuliah";
+              importErrors.push(`Jadwal "${s.course_name}": ${msg}`);
+            }
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : "Error tidak terduga";
+            importErrors.push(`Jadwal "${s.course_name}": ${msg}`);
           }
-        } else {
-          setSchedules(imported.data.schedules);
-          localStorage.setItem(
-            LEGACY_STORAGE_KEYS.schedules,
-            JSON.stringify(imported.data.schedules)
-          );
         }
       }
 
-      if (imported.data.notes) {
-        if (user) {
-          // Re-map notes with active user's UUID
-          const sanitizedNotes = imported.data.notes.map((n) => ({
-            ...n,
-            user_id: user.id,
-          }));
-          setNotes(sanitizedNotes);
-          const key = getScopedStorageKey(user.id, "notes");
-          localStorage.setItem(key, JSON.stringify(sanitizedNotes));
+      // 2. Impor Tasks SETELAH Schedules, petakan course_schedule_id secara eksplisit
+      if (imported.data.tasks && imported.data.tasks.length > 0) {
+        for (const t of imported.data.tasks) {
+          try {
+            let resolvedScheduleId: string | undefined = undefined;
 
-          // Sync each imported note to Supabase
-          for (const n of sanitizedNotes) {
-            createUserNote(user.id, {
+            if (t.course_schedule_id) {
+              if (scheduleIdMap.has(t.course_schedule_id)) {
+                // Berhasil dipetakan ke UUID jadwal yang baru diimpor
+                resolvedScheduleId = scheduleIdMap.get(t.course_schedule_id);
+              } else {
+                // Periksa apakah ID merujuk pada jadwal yang sudah ada sebelumnya di akun pengguna
+                const existing = schedules.find((s) => s.id === t.course_schedule_id);
+                if (existing) {
+                  resolvedScheduleId = existing.id;
+                } else {
+                  console.warn(
+                    `[Import] Jadwal dengan ID "${t.course_schedule_id}" untuk tugas "${t.title}" tidak ditemukan di file backup maupun jadwal akun aktif. Mengosongkan relasi jadwal agar tugas tetap tersimpan.`
+                  );
+                  resolvedScheduleId = undefined;
+                }
+              }
+            }
+
+            const res = await createUserTask(user.id, {
+              title: t.title,
+              description: t.description,
+              due_at: t.due_at,
+              priority: t.priority as TaskPriority,
+              status: t.status as TaskStatus,
+              course_schedule_id: resolvedScheduleId,
+            });
+
+            if (res.data) {
+              insertedTasks.push(res.data);
+            } else {
+              const msg = res.error?.message || "Gagal menyimpan tugas";
+              importErrors.push(`Tugas "${t.title}": ${msg}`);
+            }
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : "Error tidak terduga";
+            importErrors.push(`Tugas "${t.title}": ${msg}`);
+          }
+        }
+      }
+
+      // 3. Impor Notes
+      if (imported.data.notes && imported.data.notes.length > 0) {
+        for (const n of imported.data.notes) {
+          try {
+            const res = await createUserNote(user.id, {
               title: n.title,
               content: n.content,
               category: n.category,
               tags: n.tags,
-              is_favorite: n.is_favorite,
-            }).catch((err) =>
-              console.error("Error importing note to Supabase:", err)
-            );
+              is_favorite: Boolean(n.is_favorite),
+            });
+
+            if (res.data) {
+              insertedNotes.push(res.data);
+            } else {
+              const msg = res.error?.message || "Gagal menyimpan catatan";
+              importErrors.push(`Catatan "${n.title}": ${msg}`);
+            }
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : "Error tidak terduga";
+            importErrors.push(`Catatan "${n.title}": ${msg}`);
           }
-        } else {
-          setNotes(imported.data.notes);
-          localStorage.setItem(LEGACY_STORAGE_KEYS.notes, JSON.stringify(imported.data.notes));
         }
       }
-      if (imported.data.agendaEvents) {
-        if (user) {
-          // Re-map agenda events with active user's UUID
-          const sanitizedEvents = imported.data.agendaEvents.map((a) => ({
-            ...a,
-            user_id: user.id,
-          }));
-          setAgendaEvents(sanitizedEvents);
-          const key = getScopedStorageKey(user.id, "agenda");
-          localStorage.setItem(key, JSON.stringify(sanitizedEvents));
 
-          // Sync each imported event to Supabase
-          for (const a of sanitizedEvents) {
-            createUserAgendaEvent(user.id, {
+      // 4. Impor Agenda
+      if (imported.data.agendaEvents && imported.data.agendaEvents.length > 0) {
+        for (const a of imported.data.agendaEvents) {
+          try {
+            const res = await createUserAgendaEvent(user.id, {
               title: a.title,
               description: a.description,
               start_at: a.start_at,
               end_at: a.end_at,
               location: a.location,
               reminder_minutes: a.reminder_minutes,
-            }).catch((err) =>
-              console.error("Error importing agenda event to Supabase:", err)
-            );
+            });
+
+            if (res.data) {
+              insertedAgendaEvents.push(res.data);
+            } else {
+              const msg = res.error?.message || "Gagal menyimpan agenda";
+              importErrors.push(`Agenda "${a.title}": ${msg}`);
+            }
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : "Error tidak terduga";
+            importErrors.push(`Agenda "${a.title}": ${msg}`);
           }
-        } else {
-          setAgendaEvents(imported.data.agendaEvents);
-          localStorage.setItem(
-            LEGACY_STORAGE_KEYS.agenda,
-            JSON.stringify(imported.data.agendaEvents)
-          );
         }
       }
+
+      // 5. Perbarui State & Scoped LocalStorage dengan ID aktual hasil insert Supabase
+      if (insertedSchedules.length > 0) {
+        setSchedules((prev) => {
+          const next = [...insertedSchedules, ...prev];
+          try {
+            const key = getScopedStorageKey(user.id, "schedules");
+            localStorage.setItem(key, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error caching scoped schedules", e);
+          }
+          return next;
+        });
+      }
+
+      if (insertedTasks.length > 0) {
+        setTasks((prev) => {
+          const next = [...insertedTasks, ...prev];
+          try {
+            const key = getScopedStorageKey(user.id, "tasks");
+            localStorage.setItem(key, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error caching scoped tasks", e);
+          }
+          return next;
+        });
+      }
+
+      if (insertedNotes.length > 0) {
+        setNotes((prev) => {
+          const next = [...insertedNotes, ...prev];
+          try {
+            const key = getScopedStorageKey(user.id, "notes");
+            localStorage.setItem(key, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error caching scoped notes", e);
+          }
+          return next;
+        });
+      }
+
+      if (insertedAgendaEvents.length > 0) {
+        setAgendaEvents((prev) => {
+          const next = [...insertedAgendaEvents, ...prev];
+          try {
+            const key = getScopedStorageKey(user.id, "agenda");
+            localStorage.setItem(key, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error caching scoped agenda", e);
+          }
+          return next;
+        });
+      }
+
+      // 6. Profil & Preferensi
       if (imported.profile) {
         const newProfile: UserProfile = {
           name:
             imported.profile.name ||
-            (user
-              ? user.user_metadata?.name || user.email?.split("@")[0] || "User"
-              : DEFAULT_GUEST_PROFILE.name),
-          email: user
-            ? user.email || ""
-            : imported.profile.email || DEFAULT_GUEST_PROFILE.email,
+            user.user_metadata?.name ||
+            user.email?.split("@")[0] ||
+            "User",
+          email: user.email || "",
           title: imported.profile.title || DEFAULT_GUEST_PROFILE.title,
         };
         setProfile(newProfile);
 
-        if (user) {
-          apiUpdateUserProfile(user.id, {
+        try {
+          const res = await apiUpdateUserProfile(user.id, {
             name: newProfile.name,
             title: newProfile.title,
-          }).catch((err) =>
-            console.error("Error importing profile to Supabase:", err)
-          );
+          });
+          if (res.error) {
+            importErrors.push(`Profil: ${res.error.message}`);
+          }
           const key = getScopedStorageKey(user.id, "profile");
           localStorage.setItem(key, JSON.stringify(newProfile));
-        } else {
-          localStorage.setItem(
-            LEGACY_STORAGE_KEYS.profile,
-            JSON.stringify(newProfile)
-          );
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : "Gagal menyimpan profil";
+          importErrors.push(`Profil: ${msg}`);
         }
       }
+
       if (imported.preferences) {
         const newPrefs: UserPreferences = {
           theme: imported.preferences.theme || DEFAULT_PREFERENCES.theme,
@@ -1704,21 +1904,29 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         };
         setPreferences(newPrefs);
 
-        if (user) {
-          apiUpdateUserPreferences(user.id, newPrefs).catch((err) =>
-            console.error("Error importing preferences to Supabase:", err)
-          );
+        try {
+          const res = await apiUpdateUserPreferences(user.id, newPrefs);
+          if (res.error) {
+            importErrors.push(`Preferensi: ${res.error.message}`);
+          }
           const key = getScopedStorageKey(user.id, "preferences");
           localStorage.setItem(key, JSON.stringify(newPrefs));
-        } else {
-          localStorage.setItem(
-            LEGACY_STORAGE_KEYS.preferences,
-            JSON.stringify(newPrefs)
-          );
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : "Gagal menyimpan preferensi";
+          importErrors.push(`Preferensi: ${msg}`);
         }
       }
+
+      // 7. Jika ada kegagalan, lemparkan error informatif
+      if (importErrors.length > 0) {
+        throw new Error(
+          `Sebagian data gagal diimpor ke Supabase:\n${importErrors.slice(0, 3).join("\n")}${
+            importErrors.length > 3 ? `\n...dan ${importErrors.length - 3} kesalahan lainnya` : ""
+          }`
+        );
+      }
     },
-    [user]
+    [user, schedules]
   );
 
   const value = useMemo(

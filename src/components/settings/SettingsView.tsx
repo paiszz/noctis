@@ -75,6 +75,7 @@ export function SettingsView() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingImport, setPendingImport] =
     useState<ValidatedNoctisExport | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   // Timezone display (loaded on client to prevent SSR hydration mismatch)
   const [currentTimezone, setCurrentTimezone] = useState("Asia/Jakarta");
@@ -221,15 +222,22 @@ export function SettingsView() {
     reader.readAsText(file);
   };
 
-  const handleConfirmImport = () => {
+  const handleConfirmImport = async () => {
     if (!pendingImport) return;
 
     try {
-      importAllData(pendingImport);
+      setIsImporting(true);
+      await importAllData(pendingImport);
       toast.success("Data berhasil diimpor dan disinkronkan ke seluruh aplikasi.");
       setPendingImport(null);
-    } catch (err) {
-      toast.error("Gagal mengimpor data ke penyimpanan aplikasi.");
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Gagal mengimpor data ke penyimpanan aplikasi.";
+      toast.error(msg);
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -713,16 +721,18 @@ export function SettingsView() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setPendingImport(null)}
+              disabled={isImporting}
+              onClick={() => !isImporting && setPendingImport(null)}
             >
               Batal
             </Button>
             <Button
               variant="primary"
               size="sm"
+              disabled={isImporting}
               onClick={handleConfirmImport}
             >
-              Ganti Data & Impor
+              {isImporting ? "Mengimpor..." : "Ganti Data & Impor"}
             </Button>
           </div>
         </div>
