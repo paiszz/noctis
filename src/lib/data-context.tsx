@@ -54,6 +54,12 @@ import {
   updateUserNote,
   deleteUserNote,
 } from "@/lib/supabase/notes";
+import {
+  getUserAgendaEvents,
+  createUserAgendaEvent,
+  updateUserAgendaEvent,
+  deleteUserAgendaEvent,
+} from "@/lib/supabase/agenda";
 
 export const LEGACY_STORAGE_KEYS = {
   tasks: "noctis_storage_tasks_v1",
@@ -174,9 +180,9 @@ interface DataContextType {
 
   // Agenda Events
   agendaEvents: AgendaEvent[];
-  addAgendaEvent: (input: AgendaInput) => AgendaEvent;
-  updateAgendaEvent: (id: string, updates: Partial<Omit<AgendaEvent, "id" | "user_id">>) => void;
-  deleteAgendaEvent: (id: string) => void;
+  addAgendaEvent: (input: AgendaInput) => Promise<AgendaEvent>;
+  updateAgendaEvent: (id: string, updates: Partial<Omit<AgendaEvent, "id" | "user_id">>) => Promise<void>;
+  deleteAgendaEvent: (id: string) => Promise<void>;
 
   // Profile
   profile: UserProfile;
@@ -359,7 +365,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         }
 
         const storedAgenda = localStorage.getItem(scopedAgendaKey);
-        setAgendaEvents(storedAgenda ? JSON.parse(storedAgenda) : []);
+        if (storedAgenda) {
+          setAgendaEvents(JSON.parse(storedAgenda));
+        }
 
         const cachedProfile = localStorage.getItem(scopedProfileKey);
         if (cachedProfile) {
@@ -394,7 +402,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       async function loadSupabaseUserData() {
         try {
-          const [profileRes, prefRes, tasksRes, schedulesRes, notesRes] = await Promise.all([
+          const [profileRes, prefRes, tasksRes, schedulesRes, notesRes, agendaRes] = await Promise.all([
             getUserProfile(currentUserIdForFetch, {
               name: initialUserName,
               email: currentUserEmailForFetch || undefined,
@@ -404,6 +412,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             getUserTasks(currentUserIdForFetch),
             getUserSchedules(currentUserIdForFetch),
             getUserNotes(currentUserIdForFetch),
+            getUserAgendaEvents(currentUserIdForFetch),
           ]);
 
           // Discard results if user switched or another load was initiated
@@ -443,6 +452,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             }
           } else if (notesRes.error) {
             console.error("Error loading user notes from Supabase:", notesRes.error);
+          }
+
+          // Agenda Events from Supabase
+          if (agendaRes.data) {
+            setAgendaEvents(agendaRes.data);
+            try {
+              localStorage.setItem(scopedAgendaKey, JSON.stringify(agendaRes.data));
+            } catch (e) {
+              console.warn("Error caching scoped agenda", e);
+            }
+          } else if (agendaRes.error) {
+            console.error("Error loading user agenda events from Supabase:", agendaRes.error);
           }
 
           // Profile from Supabase
@@ -1324,86 +1345,174 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [user]
   );
 
-  // ── Agenda Actions ──
+  // ── Agenda Actions (Supabase Cloud + Local Storage Fallback) ──
 
   const addAgendaEvent = useCallback(
-    (input: AgendaInput): AgendaEvent => {
-      const currentUserId = user?.id || DEFAULT_USER_ID;
-      const nowISO = new Date().toISOString();
-      const newEvent: AgendaEvent = {
-        id: generateId("agenda"),
-        user_id: currentUserId,
-        title: input.title.trim(),
-        description: input.description?.trim() || undefined,
-        start_at: input.start_at,
-        end_at: input.end_at || undefined,
-        location: input.location?.trim() || undefined,
-        reminder_minutes: input.reminder_minutes,
-        created_at: nowISO,
-        updated_at: nowISO,
-      };
-
-      setAgendaEvents((prev) => {
-        const next = [newEvent, ...prev];
-        try {
-          const storageKey = getScopedStorageKey(user?.id, "agenda");
-          localStorage.setItem(storageKey, JSON.stringify(next));
-        } catch (e) {
-          console.warn("Error saving agenda events", e);
+    async (input: AgendaInput): Promise<AgendaEvent> => {
+      if (user) {
+        const { data, error } = await createUserAgendaEvent(user.id, input);
+        if (error || !data) {
+          throw error || new Error("Gagal membuat agenda kegiatan di Supabase.");
         }
-        return next;
-      });
 
-      return newEvent;
+        setAgendaEvents((prev) => {
+          const next = [data, ...prev];
+          try {
+            const storageKey = getScopedStorageKey(user.id, "agenda");
+            localStorage.setItem(storageKey, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error caching agenda events", e);
+          }
+          return next;
+        });
+
+        return data;
+      } else {
+        // Guest mode
+        const nowISO = new Date().toISOString();
+        const newEvent: AgendaEvent = {
+          id: generateId("agenda"),
+          user_id: DEFAULT_USER_ID,
+          title: input.title.trim(),
+          description: input.description?.trim() || undefined,
+          start_at: input.start_at,
+          end_at: input.end_at || undefined,
+          location: input.location?.trim() || undefined,
+          reminder_minutes: input.reminder_minutes,
+          created_at: nowISO,
+          updated_at: nowISO,
+        };
+
+        setAgendaEvents((prev) => {
+          const next = [newEvent, ...prev];
+          try {
+            localStorage.setItem(LEGACY_STORAGE_KEYS.agenda, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error saving agenda events", e);
+          }
+          return next;
+        });
+
+        return newEvent;
+      }
     },
-    [user?.id]
+    [user]
   );
 
   const updateAgendaEvent = useCallback(
-    (id: string, updates: Partial<Omit<AgendaEvent, "id" | "user_id">>) => {
-      setAgendaEvents((prev) => {
-        const next = prev.map((a) =>
-          a.id === id
-            ? {
-                ...a,
-                ...updates,
-                title: updates.title !== undefined ? updates.title.trim() : a.title,
-                description:
-                  updates.description !== undefined
-                    ? updates.description.trim() || undefined
-                    : a.description,
-                location:
-                  updates.location !== undefined ? updates.location.trim() || undefined : a.location,
-                updated_at: new Date().toISOString(),
-              }
-            : a
-        );
-        try {
-          const storageKey = getScopedStorageKey(user?.id, "agenda");
-          localStorage.setItem(storageKey, JSON.stringify(next));
-        } catch (e) {
-          console.warn("Error saving agenda events", e);
+    async (
+      id: string,
+      updates: Partial<Omit<AgendaEvent, "id" | "user_id">>
+    ): Promise<void> => {
+      if (user) {
+        let rollbackAgenda: AgendaEvent[] = [];
+        setAgendaEvents((prev) => {
+          rollbackAgenda = prev;
+          return prev.map((a) =>
+            a.id === id
+              ? {
+                  ...a,
+                  ...updates,
+                  title: updates.title !== undefined ? updates.title.trim() : a.title,
+                  description:
+                    updates.description !== undefined
+                      ? updates.description.trim() || undefined
+                      : a.description,
+                  location:
+                    updates.location !== undefined ? updates.location.trim() || undefined : a.location,
+                  updated_at: new Date().toISOString(),
+                }
+              : a
+          );
+        });
+
+        const { data, error } = await updateUserAgendaEvent(user.id, id, updates);
+        if (error) {
+          setAgendaEvents(rollbackAgenda);
+          throw error;
         }
-        return next;
-      });
+
+        if (data) {
+          setAgendaEvents((prev) => {
+            const next = prev.map((a) => (a.id === id ? data : a));
+            try {
+              const storageKey = getScopedStorageKey(user.id, "agenda");
+              localStorage.setItem(storageKey, JSON.stringify(next));
+            } catch (e) {
+              console.warn("Error caching agenda events", e);
+            }
+            return next;
+          });
+        }
+      } else {
+        // Guest mode
+        setAgendaEvents((prev) => {
+          const next = prev.map((a) =>
+            a.id === id
+              ? {
+                  ...a,
+                  ...updates,
+                  title: updates.title !== undefined ? updates.title.trim() : a.title,
+                  description:
+                    updates.description !== undefined
+                      ? updates.description.trim() || undefined
+                      : a.description,
+                  location:
+                    updates.location !== undefined ? updates.location.trim() || undefined : a.location,
+                  updated_at: new Date().toISOString(),
+                }
+              : a
+          );
+          try {
+            localStorage.setItem(LEGACY_STORAGE_KEYS.agenda, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error saving agenda events", e);
+          }
+          return next;
+        });
+      }
     },
-    [user?.id]
+    [user]
   );
 
   const deleteAgendaEvent = useCallback(
-    (id: string) => {
-      setAgendaEvents((prev) => {
-        const next = prev.filter((a) => a.id !== id);
-        try {
-          const storageKey = getScopedStorageKey(user?.id, "agenda");
-          localStorage.setItem(storageKey, JSON.stringify(next));
-        } catch (e) {
-          console.warn("Error saving agenda events", e);
+    async (id: string): Promise<void> => {
+      if (user) {
+        let rollbackAgenda: AgendaEvent[] = [];
+        setAgendaEvents((prev) => {
+          rollbackAgenda = prev;
+          return prev.filter((a) => a.id !== id);
+        });
+
+        const { error } = await deleteUserAgendaEvent(user.id, id);
+        if (error) {
+          setAgendaEvents(rollbackAgenda);
+          throw error;
         }
-        return next;
-      });
+
+        try {
+          const storageKey = getScopedStorageKey(user.id, "agenda");
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify(rollbackAgenda.filter((a) => a.id !== id))
+          );
+        } catch (e) {
+          console.warn("Error caching agenda events", e);
+        }
+      } else {
+        // Guest mode
+        setAgendaEvents((prev) => {
+          const next = prev.filter((a) => a.id !== id);
+          try {
+            localStorage.setItem(LEGACY_STORAGE_KEYS.agenda, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error saving agenda events", e);
+          }
+          return next;
+        });
+      }
     },
-    [user?.id]
+    [user]
   );
 
   // ── Data Management (Export & Import) ──
@@ -1523,9 +1632,36 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         }
       }
       if (imported.data.agendaEvents) {
-        setAgendaEvents(imported.data.agendaEvents);
-        const key = getScopedStorageKey(currentUserId, "agenda");
-        localStorage.setItem(key, JSON.stringify(imported.data.agendaEvents));
+        if (user) {
+          // Re-map agenda events with active user's UUID
+          const sanitizedEvents = imported.data.agendaEvents.map((a) => ({
+            ...a,
+            user_id: user.id,
+          }));
+          setAgendaEvents(sanitizedEvents);
+          const key = getScopedStorageKey(user.id, "agenda");
+          localStorage.setItem(key, JSON.stringify(sanitizedEvents));
+
+          // Sync each imported event to Supabase
+          for (const a of sanitizedEvents) {
+            createUserAgendaEvent(user.id, {
+              title: a.title,
+              description: a.description,
+              start_at: a.start_at,
+              end_at: a.end_at,
+              location: a.location,
+              reminder_minutes: a.reminder_minutes,
+            }).catch((err) =>
+              console.error("Error importing agenda event to Supabase:", err)
+            );
+          }
+        } else {
+          setAgendaEvents(imported.data.agendaEvents);
+          localStorage.setItem(
+            LEGACY_STORAGE_KEYS.agenda,
+            JSON.stringify(imported.data.agendaEvents)
+          );
+        }
       }
       if (imported.profile) {
         const newProfile: UserProfile = {

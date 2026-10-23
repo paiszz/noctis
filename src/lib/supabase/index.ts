@@ -4,3 +4,4 @@ export * from './profile';
 export * from './tasks';
 export * from './schedules';
 export * from './notes';
+export * from './agenda';

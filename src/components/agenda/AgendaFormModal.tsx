@@ -44,6 +44,7 @@ export function AgendaFormModal({
 }: AgendaFormModalProps) {
   const { addAgendaEvent, updateAgendaEvent } = useData();
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startAt, setStartAt] = useState("");
@@ -81,7 +82,7 @@ export function AgendaFormModal({
     setErrors({});
   }, [agendaToEdit, isOpen]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const newErrors: { title?: string; time?: string } = {};
@@ -105,29 +106,39 @@ export function AgendaFormModal({
     const endISO = endAt ? new Date(endAt).toISOString() : undefined;
     const remMin = reminderMinutes !== "" ? Number(reminderMinutes) : undefined;
 
-    if (agendaToEdit) {
-      updateAgendaEvent(agendaToEdit.id, {
-        title,
-        description: description || undefined,
-        start_at: startISO,
-        end_at: endISO,
-        location: location || undefined,
-        reminder_minutes: remMin,
-      });
-      toast.success("Agenda berhasil diperbarui");
-    } else {
-      addAgendaEvent({
-        title,
-        description: description || undefined,
-        start_at: startISO,
-        end_at: endISO,
-        location: location || undefined,
-        reminder_minutes: remMin,
-      });
-      toast.success("Agenda baru berhasil ditambahkan");
+    try {
+      setIsSubmitting(true);
+      if (agendaToEdit) {
+        await updateAgendaEvent(agendaToEdit.id, {
+          title,
+          description: description || undefined,
+          start_at: startISO,
+          end_at: endISO,
+          location: location || undefined,
+          reminder_minutes: remMin,
+        });
+        toast.success("Agenda berhasil diperbarui");
+      } else {
+        await addAgendaEvent({
+          title,
+          description: description || undefined,
+          start_at: startISO,
+          end_at: endISO,
+          location: location || undefined,
+          reminder_minutes: remMin,
+        });
+        toast.success("Agenda baru berhasil ditambahkan");
+      }
+      onClose();
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Gagal menyimpan agenda kegiatan. Silakan periksa koneksi internet.";
+      toast.error(msg);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    onClose();
   };
 
   return (
@@ -283,6 +294,7 @@ export function AgendaFormModal({
                 type="button"
                 variant="danger"
                 size="sm"
+                disabled={isSubmitting}
                 icon={<Trash2 className="w-4 h-4" />}
                 onClick={() => {
                   onDelete(agendaToEdit);
@@ -299,12 +311,17 @@ export function AgendaFormModal({
               type="button"
               variant="ghost"
               size="sm"
+              disabled={isSubmitting}
               onClick={onClose}
             >
               Batal
             </Button>
-            <Button type="submit" size="sm">
-              {agendaToEdit ? "Simpan Perubahan" : "Tambah Agenda"}
+            <Button type="submit" size="sm" disabled={isSubmitting}>
+              {isSubmitting
+                ? "Menyimpan..."
+                : agendaToEdit
+                ? "Simpan Perubahan"
+                : "Tambah Agenda"}
             </Button>
           </div>
         </div>
