@@ -24,6 +24,7 @@ export function NoteEditorModal({
 }: NoteEditorModalProps) {
   const { addNote, updateNote } = useData();
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [category, setCategory] = useState("Kuliah");
@@ -72,7 +73,7 @@ export function NoteEditorModal({
     setTags(tags.filter((t) => t !== tagToRemove));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const validationErrors: { title?: string; content?: string } = {};
@@ -100,27 +101,37 @@ export function NoteEditorModal({
       finalTags.push(pendingTag);
     }
 
-    if (noteToEdit) {
-      updateNote(noteToEdit.id, {
-        title,
-        content,
-        category: finalCategory,
-        tags: finalTags.length > 0 ? finalTags : undefined,
-        is_favorite: isFavorite,
-      });
-      toast.success("Catatan berhasil diperbarui");
-    } else {
-      addNote({
-        title,
-        content,
-        category: finalCategory,
-        tags: finalTags.length > 0 ? finalTags : undefined,
-        is_favorite: isFavorite,
-      });
-      toast.success("Catatan baru berhasil dibuat");
+    try {
+      setIsSubmitting(true);
+      if (noteToEdit) {
+        await updateNote(noteToEdit.id, {
+          title,
+          content,
+          category: finalCategory,
+          tags: finalTags.length > 0 ? finalTags : undefined,
+          is_favorite: isFavorite,
+        });
+        toast.success("Catatan berhasil diperbarui");
+      } else {
+        await addNote({
+          title,
+          content,
+          category: finalCategory,
+          tags: finalTags.length > 0 ? finalTags : undefined,
+          is_favorite: isFavorite,
+        });
+        toast.success("Catatan baru berhasil dibuat");
+      }
+      onClose();
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Gagal menyimpan catatan. Silakan periksa koneksi internet.";
+      toast.error(msg);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    onClose();
   };
 
   return (
@@ -301,6 +312,7 @@ export function NoteEditorModal({
                 type="button"
                 variant="danger"
                 size="sm"
+                disabled={isSubmitting}
                 icon={<Trash2 className="w-4 h-4" />}
                 onClick={() => {
                   onDelete(noteToEdit);
@@ -317,12 +329,17 @@ export function NoteEditorModal({
               type="button"
               variant="ghost"
               size="sm"
+              disabled={isSubmitting}
               onClick={onClose}
             >
               Batal
             </Button>
-            <Button type="submit" size="sm">
-              {noteToEdit ? "Simpan Perubahan" : "Simpan Catatan"}
+            <Button type="submit" size="sm" disabled={isSubmitting}>
+              {isSubmitting
+                ? "Menyimpan..."
+                : noteToEdit
+                ? "Simpan Perubahan"
+                : "Simpan Catatan"}
             </Button>
           </div>
         </div>

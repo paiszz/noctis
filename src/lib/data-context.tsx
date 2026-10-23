@@ -48,6 +48,12 @@ import {
   updateUserSchedule,
   deleteUserSchedule,
 } from "@/lib/supabase/schedules";
+import {
+  getUserNotes,
+  createUserNote,
+  updateUserNote,
+  deleteUserNote,
+} from "@/lib/supabase/notes";
 
 export const LEGACY_STORAGE_KEYS = {
   tasks: "noctis_storage_tasks_v1",
@@ -155,10 +161,10 @@ interface DataContextType {
 
   // Notes
   notes: Note[];
-  addNote: (input: NoteInput) => Note;
-  updateNote: (id: string, updates: Partial<Omit<Note, "id" | "user_id">>) => void;
-  deleteNote: (id: string) => void;
-  toggleNoteFavorite: (id: string) => void;
+  addNote: (input: NoteInput) => Promise<Note>;
+  updateNote: (id: string, updates: Partial<Omit<Note, "id" | "user_id">>) => Promise<void>;
+  deleteNote: (id: string) => Promise<void>;
+  toggleNoteFavorite: (id: string) => Promise<void>;
 
   // Schedules (Jadwal Kuliah)
   schedules: CourseSchedule[];
@@ -348,7 +354,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         }
 
         const storedNotes = localStorage.getItem(scopedNotesKey);
-        setNotes(storedNotes ? JSON.parse(storedNotes) : []);
+        if (storedNotes) {
+          setNotes(JSON.parse(storedNotes));
+        }
 
         const storedAgenda = localStorage.getItem(scopedAgendaKey);
         setAgendaEvents(storedAgenda ? JSON.parse(storedAgenda) : []);
@@ -386,7 +394,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       async function loadSupabaseUserData() {
         try {
-          const [profileRes, prefRes, tasksRes, schedulesRes] = await Promise.all([
+          const [profileRes, prefRes, tasksRes, schedulesRes, notesRes] = await Promise.all([
             getUserProfile(currentUserIdForFetch, {
               name: initialUserName,
               email: currentUserEmailForFetch || undefined,
@@ -395,6 +403,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             getUserPreferences(currentUserIdForFetch),
             getUserTasks(currentUserIdForFetch),
             getUserSchedules(currentUserIdForFetch),
+            getUserNotes(currentUserIdForFetch),
           ]);
 
           // Discard results if user switched or another load was initiated
@@ -422,6 +431,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             }
           } else if (schedulesRes.error) {
             console.error("Error loading user schedules from Supabase:", schedulesRes.error);
+          }
+
+          // Notes from Supabase
+          if (notesRes.data) {
+            setNotes(notesRes.data);
+            try {
+              localStorage.setItem(scopedNotesKey, JSON.stringify(notesRes.data));
+            } catch (e) {
+              console.warn("Error caching scoped notes", e);
+            }
+          } else if (notesRes.error) {
+            console.error("Error loading user notes from Supabase:", notesRes.error);
           }
 
           // Profile from Supabase
@@ -875,108 +896,257 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [user, tasks]
   );
 
-  // ── Note Actions ──
+  // ── Note Actions (Supabase Cloud + Local Storage Fallback) ──
 
   const addNote = useCallback(
-    (input: NoteInput): Note => {
-      const currentUserId = user?.id || DEFAULT_USER_ID;
-      const nowISO = new Date().toISOString();
-      const newNote: Note = {
-        id: generateId("note"),
-        user_id: currentUserId,
-        title: input.title.trim(),
-        content: input.content.trim(),
-        category: input.category?.trim() || undefined,
-        tags: input.tags && input.tags.length > 0 ? input.tags : undefined,
-        is_favorite: Boolean(input.is_favorite),
-        created_at: nowISO,
-        updated_at: nowISO,
-      };
-
-      setNotes((prev) => {
-        const next = [newNote, ...prev];
-        try {
-          const storageKey = getScopedStorageKey(user?.id, "notes");
-          localStorage.setItem(storageKey, JSON.stringify(next));
-        } catch (e) {
-          console.warn("Error saving notes", e);
+    async (input: NoteInput): Promise<Note> => {
+      if (user) {
+        const { data, error } = await createUserNote(user.id, input);
+        if (error || !data) {
+          throw error || new Error("Gagal membuat catatan di Supabase.");
         }
-        return next;
-      });
 
-      return newNote;
+        setNotes((prev) => {
+          const next = [data, ...prev];
+          try {
+            const storageKey = getScopedStorageKey(user.id, "notes");
+            localStorage.setItem(storageKey, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error caching notes", e);
+          }
+          return next;
+        });
+
+        return data;
+      } else {
+        // Guest mode
+        const nowISO = new Date().toISOString();
+        const newNote: Note = {
+          id: generateId("note"),
+          user_id: DEFAULT_USER_ID,
+          title: input.title.trim(),
+          content: input.content.trim(),
+          category: input.category?.trim() || undefined,
+          tags: input.tags && input.tags.length > 0 ? input.tags : undefined,
+          is_favorite: Boolean(input.is_favorite),
+          created_at: nowISO,
+          updated_at: nowISO,
+        };
+
+        setNotes((prev) => {
+          const next = [newNote, ...prev];
+          try {
+            localStorage.setItem(LEGACY_STORAGE_KEYS.notes, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error saving notes", e);
+          }
+          return next;
+        });
+
+        return newNote;
+      }
     },
-    [user?.id]
+    [user]
   );
 
   const updateNote = useCallback(
-    (id: string, updates: Partial<Omit<Note, "id" | "user_id">>) => {
-      setNotes((prev) => {
-        const next = prev.map((n) =>
-          n.id === id
-            ? {
-                ...n,
-                ...updates,
-                title: updates.title !== undefined ? updates.title.trim() : n.title,
-                content: updates.content !== undefined ? updates.content.trim() : n.content,
-                category:
-                  updates.category !== undefined
-                    ? updates.category.trim() || undefined
-                    : n.category,
-                updated_at: new Date().toISOString(),
-              }
-            : n
-        );
-        try {
-          const storageKey = getScopedStorageKey(user?.id, "notes");
-          localStorage.setItem(storageKey, JSON.stringify(next));
-        } catch (e) {
-          console.warn("Error saving notes", e);
+    async (
+      id: string,
+      updates: Partial<Omit<Note, "id" | "user_id">>
+    ): Promise<void> => {
+      if (user) {
+        let rollbackNotes: Note[] = [];
+        setNotes((prev) => {
+          rollbackNotes = prev;
+          return prev.map((n) =>
+            n.id === id
+              ? {
+                  ...n,
+                  ...updates,
+                  title: updates.title !== undefined ? updates.title.trim() : n.title,
+                  content: updates.content !== undefined ? updates.content.trim() : n.content,
+                  category:
+                    updates.category !== undefined
+                      ? updates.category.trim() || undefined
+                      : n.category,
+                  tags:
+                    updates.tags !== undefined
+                      ? updates.tags.length > 0
+                        ? updates.tags
+                        : undefined
+                      : n.tags,
+                  is_favorite:
+                    updates.is_favorite !== undefined
+                      ? Boolean(updates.is_favorite)
+                      : n.is_favorite,
+                  updated_at: new Date().toISOString(),
+                }
+              : n
+          );
+        });
+
+        const { data, error } = await updateUserNote(user.id, id, updates);
+        if (error) {
+          setNotes(rollbackNotes);
+          throw error;
         }
-        return next;
-      });
+
+        if (data) {
+          setNotes((prev) => {
+            const next = prev.map((n) => (n.id === id ? data : n));
+            try {
+              const storageKey = getScopedStorageKey(user.id, "notes");
+              localStorage.setItem(storageKey, JSON.stringify(next));
+            } catch (e) {
+              console.warn("Error caching notes", e);
+            }
+            return next;
+          });
+        }
+      } else {
+        // Guest mode
+        setNotes((prev) => {
+          const next = prev.map((n) =>
+            n.id === id
+              ? {
+                  ...n,
+                  ...updates,
+                  title: updates.title !== undefined ? updates.title.trim() : n.title,
+                  content: updates.content !== undefined ? updates.content.trim() : n.content,
+                  category:
+                    updates.category !== undefined
+                      ? updates.category.trim() || undefined
+                      : n.category,
+                  tags:
+                    updates.tags !== undefined
+                      ? updates.tags.length > 0
+                        ? updates.tags
+                        : undefined
+                      : n.tags,
+                  is_favorite:
+                    updates.is_favorite !== undefined
+                      ? Boolean(updates.is_favorite)
+                      : n.is_favorite,
+                  updated_at: new Date().toISOString(),
+                }
+              : n
+          );
+          try {
+            localStorage.setItem(LEGACY_STORAGE_KEYS.notes, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error saving notes", e);
+          }
+          return next;
+        });
+      }
     },
-    [user?.id]
+    [user]
   );
 
   const deleteNote = useCallback(
-    (id: string) => {
-      setNotes((prev) => {
-        const next = prev.filter((n) => n.id !== id);
-        try {
-          const storageKey = getScopedStorageKey(user?.id, "notes");
-          localStorage.setItem(storageKey, JSON.stringify(next));
-        } catch (e) {
-          console.warn("Error saving notes", e);
+    async (id: string): Promise<void> => {
+      if (user) {
+        let rollbackNotes: Note[] = [];
+        setNotes((prev) => {
+          rollbackNotes = prev;
+          return prev.filter((n) => n.id !== id);
+        });
+
+        const { error } = await deleteUserNote(user.id, id);
+        if (error) {
+          setNotes(rollbackNotes);
+          throw error;
         }
-        return next;
-      });
+
+        try {
+          const storageKey = getScopedStorageKey(user.id, "notes");
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify(rollbackNotes.filter((n) => n.id !== id))
+          );
+        } catch (e) {
+          console.warn("Error caching notes", e);
+        }
+      } else {
+        // Guest mode
+        setNotes((prev) => {
+          const next = prev.filter((n) => n.id !== id);
+          try {
+            localStorage.setItem(LEGACY_STORAGE_KEYS.notes, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error saving notes", e);
+          }
+          return next;
+        });
+      }
     },
-    [user?.id]
+    [user]
   );
 
   const toggleNoteFavorite = useCallback(
-    (id: string) => {
-      setNotes((prev) => {
-        const next = prev.map((n) =>
-          n.id === id
-            ? {
-                ...n,
-                is_favorite: !n.is_favorite,
-                updated_at: new Date().toISOString(),
-              }
-            : n
-        );
-        try {
-          const storageKey = getScopedStorageKey(user?.id, "notes");
-          localStorage.setItem(storageKey, JSON.stringify(next));
-        } catch (e) {
-          console.warn("Error saving notes", e);
+    async (id: string): Promise<void> => {
+      const target = notes.find((n) => n.id === id);
+      if (!target) return;
+      const nextFavorite = !target.is_favorite;
+
+      if (user) {
+        let rollbackNotes: Note[] = [];
+        setNotes((prev) => {
+          rollbackNotes = prev;
+          return prev.map((n) =>
+            n.id === id
+              ? {
+                  ...n,
+                  is_favorite: nextFavorite,
+                  updated_at: new Date().toISOString(),
+                }
+              : n
+          );
+        });
+
+        const { error } = await updateUserNote(user.id, id, { is_favorite: nextFavorite });
+        if (error) {
+          setNotes(rollbackNotes);
+          throw error;
         }
-        return next;
-      });
+
+        try {
+          const storageKey = getScopedStorageKey(user.id, "notes");
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify(
+              rollbackNotes.map((n) =>
+                n.id === id
+                  ? { ...n, is_favorite: nextFavorite, updated_at: new Date().toISOString() }
+                  : n
+              )
+            )
+          );
+        } catch (e) {
+          console.warn("Error caching notes", e);
+        }
+      } else {
+        // Guest mode
+        setNotes((prev) => {
+          const next = prev.map((n) =>
+            n.id === id
+              ? {
+                  ...n,
+                  is_favorite: nextFavorite,
+                  updated_at: new Date().toISOString(),
+                }
+              : n
+          );
+          try {
+            localStorage.setItem(LEGACY_STORAGE_KEYS.notes, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error saving notes", e);
+          }
+          return next;
+        });
+      }
     },
-    [user?.id]
+    [user, notes]
   );
 
   // ── Schedule Actions (Supabase Cloud + Local Storage Fallback) ──
@@ -1325,9 +1495,32 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (imported.data.notes) {
-        setNotes(imported.data.notes);
-        const key = getScopedStorageKey(currentUserId, "notes");
-        localStorage.setItem(key, JSON.stringify(imported.data.notes));
+        if (user) {
+          // Re-map notes with active user's UUID
+          const sanitizedNotes = imported.data.notes.map((n) => ({
+            ...n,
+            user_id: user.id,
+          }));
+          setNotes(sanitizedNotes);
+          const key = getScopedStorageKey(user.id, "notes");
+          localStorage.setItem(key, JSON.stringify(sanitizedNotes));
+
+          // Sync each imported note to Supabase
+          for (const n of sanitizedNotes) {
+            createUserNote(user.id, {
+              title: n.title,
+              content: n.content,
+              category: n.category,
+              tags: n.tags,
+              is_favorite: n.is_favorite,
+            }).catch((err) =>
+              console.error("Error importing note to Supabase:", err)
+            );
+          }
+        } else {
+          setNotes(imported.data.notes);
+          localStorage.setItem(LEGACY_STORAGE_KEYS.notes, JSON.stringify(imported.data.notes));
+        }
       }
       if (imported.data.agendaEvents) {
         setAgendaEvents(imported.data.agendaEvents);

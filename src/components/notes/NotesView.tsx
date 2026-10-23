@@ -21,7 +21,7 @@ import { NoteEditorModal } from "./NoteEditorModal";
 import { toast } from "sonner";
 
 export function NotesView() {
-  const { notes, toggleNoteFavorite, deleteNote } = useData();
+  const { notes, toggleNoteFavorite, deleteNote, isLoaded } = useData();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -31,6 +31,7 @@ export function NotesView() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [noteToDelete, setNoteToDelete] = useState<Note | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Dynamic unique categories from all notes
   const categories = useMemo(() => {
@@ -84,13 +85,42 @@ export function NotesView() {
     setIsEditorOpen(true);
   };
 
-  const confirmDelete = () => {
-    if (noteToDelete) {
-      deleteNote(noteToDelete.id);
+  const confirmDelete = async () => {
+    if (!noteToDelete) return;
+    try {
+      setIsDeleting(true);
+      await deleteNote(noteToDelete.id);
       toast.success(`Catatan "${noteToDelete.title}" telah dihapus.`);
       setNoteToDelete(null);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Gagal menghapus catatan. Silakan periksa koneksi internet.";
+      toast.error(msg);
+    } finally {
+      setIsDeleting(false);
     }
   };
+
+  if (!isLoaded) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-5 animate-pulse">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-2">
+            <div className="h-8 w-44 bg-muted/20 rounded-lg" />
+            <div className="h-4 w-60 bg-muted/15 rounded" />
+          </div>
+          <div className="h-9 w-32 bg-muted/20 rounded-xl" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <Card key={i} padding="md" className="h-40 bg-surface/60" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
@@ -237,14 +267,22 @@ export function NotesView() {
                   </h2>
                   <button
                     type="button"
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation();
-                      toggleNoteFavorite(note.id);
-                      toast.success(
-                        note.is_favorite
-                          ? `Catatan "${note.title}" dihapus dari favorit.`
-                          : `Catatan "${note.title}" ditambahkan ke favorit.`
-                      );
+                      try {
+                        await toggleNoteFavorite(note.id);
+                        toast.success(
+                          note.is_favorite
+                            ? `Catatan "${note.title}" dihapus dari favorit.`
+                            : `Catatan "${note.title}" ditambahkan ke favorit.`
+                        );
+                      } catch (err: unknown) {
+                        const msg =
+                          err instanceof Error
+                            ? err.message
+                            : "Gagal memperbarui status favorit.";
+                        toast.error(msg);
+                      }
                     }}
                     className="shrink-0 p-1 rounded-lg text-muted hover:text-warning hover:bg-warning-light/50 transition-colors cursor-pointer"
                     aria-label={
@@ -332,6 +370,7 @@ export function NotesView() {
             <Button
               variant="ghost"
               size="sm"
+              disabled={isDeleting}
               onClick={() => setNoteToDelete(null)}
             >
               Batal
@@ -339,9 +378,10 @@ export function NotesView() {
             <Button
               variant="danger"
               size="sm"
+              disabled={isDeleting}
               onClick={confirmDelete}
             >
-              Hapus Catatan
+              {isDeleting ? "Menghapus..." : "Hapus Catatan"}
             </Button>
           </div>
         </div>

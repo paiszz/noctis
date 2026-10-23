@@ -886,7 +886,17 @@ export function DashboardContent() {
 
                   <button
                     type="button"
-                    onClick={() => toggleNoteFavorite(n.id)}
+                    onClick={async () => {
+                      try {
+                        await toggleNoteFavorite(n.id);
+                      } catch (err: unknown) {
+                        const msg =
+                          err instanceof Error
+                            ? err.message
+                            : "Gagal memperbarui status favorit.";
+                        toast.error(msg);
+                      }
+                    }}
                     className="p-1 rounded-md hover:bg-soft-accent cursor-pointer shrink-0 ml-2"
                     aria-label={n.is_favorite ? "Hapus dari favorit" : "Tambah ke favorit"}
                   >
