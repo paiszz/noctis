@@ -30,6 +30,7 @@ import { useAuth } from "@/lib/auth-context";
 import { toJakartaDate } from "@/lib/date";
 import { isOverdue, isUpcomingAgenda, isPastAgenda, PRIORITY_LABELS } from "@/types";
 import type { DayOfWeek, CourseSchedule, Task, AgendaEvent, Note } from "@/types";
+import { determineNextUpActivity } from "@/lib/next-up";
 import { toast } from "sonner";
 
 
@@ -88,38 +89,10 @@ export function DashboardContent() {
       .sort((a, b) => a.start_time.localeCompare(b.start_time));
   }, [schedules, now]);
 
-  // ── Next Up Activity ──
+  // ── Next Up Activity (evaluated chronologically across schedules & agenda) ──
   const nextUp = useMemo(() => {
-    const currentTime = format(now, "HH:mm");
-    const nextSched = todaySchedules.find((s) => s.start_time > currentTime);
-    if (nextSched) {
-      return {
-        type: "Jadwal",
-        title: nextSched.course_name,
-        time: `${nextSched.start_time} — ${nextSched.end_time}`,
-        location: nextSched.location || "Ruang Kelas",
-        href: "/calendar",
-      };
-    }
-
-    const upcoming = agendaEvents
-      .filter((a) => isUpcomingAgenda(a, now))
-      .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
-
-    if (upcoming.length > 0) {
-      return {
-        type: "Agenda",
-        title: upcoming[0].title,
-        time:
-          format(toJakartaDate(upcoming[0].start_at), "HH:mm - ") +
-          (upcoming[0].end_at ? format(toJakartaDate(upcoming[0].end_at), "HH:mm") : "Selesai"),
-        location: upcoming[0].location || "Ruang Rapat",
-        href: "/agenda",
-      };
-    }
-
-    return null;
-  }, [now, todaySchedules, agendaEvents]);
+    return determineNextUpActivity(schedules, agendaEvents, now);
+  }, [schedules, agendaEvents, now]);
 
   // ── Task Metrics & Progress Ring ──
   const totalTasks = tasks.length;
@@ -165,44 +138,53 @@ export function DashboardContent() {
       .slice(0, 2);
   }, [agendaEvents, now]);
 
-  // Unified Today's Activity timeline (Schedules + Agenda for today)
-  const todayActivities = useMemo(() => {
-    const list: Array<{
-      id: string;
-      title: string;
-      time: string;
-      color: string;
-      href: string;
-    }> = [];
-
-    todaySchedules.forEach((s, idx) => {
-      list.push({
-        id: `sched-${s.id}`,
-        title: s.course_name,
-        time: `${s.start_time} - ${s.end_time}`,
-        color: idx % 2 === 0 ? "bg-primary" : "bg-[#7A7AFF]",
-        href: "/calendar",
-      });
-    });
-
+  // Activity Card items: Exclusively sourced from Agenda Events (today or nearest upcoming)
+  const activityItems = useMemo(() => {
     const todayStr = format(now, "yyyy-MM-dd");
-    agendaEvents.forEach((a) => {
-      const aStart = toJakartaDate(a.start_at);
-      if (format(aStart, "yyyy-MM-dd") === todayStr) {
-        list.push({
-          id: `agenda-${a.id}`,
-          title: a.title,
-          time:
-            format(aStart, "HH:mm") +
-            (a.end_at ? ` - ${format(toJakartaDate(a.end_at), "HH:mm")}` : ""),
-          color: "bg-[#00D589]",
-          href: "/agenda",
-        });
-      }
-    });
 
-    return list.slice(0, 3);
-  }, [todaySchedules, agendaEvents, now]);
+    // 1. Agenda events occurring today
+    const todayAgenda = agendaEvents
+      .filter((a) => {
+        if (!a.start_at) return false;
+        return format(toJakartaDate(a.start_at), "yyyy-MM-dd") === todayStr;
+      })
+      .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
+
+    const sourceList =
+      todayAgenda.length > 0
+        ? todayAgenda
+        : agendaEvents
+            .filter((a) => isUpcomingAgenda(a, now))
+            .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
+
+    return sourceList.slice(0, 3).map((a) => {
+      const aStart = toJakartaDate(a.start_at);
+      const aEnd = a.end_at ? toJakartaDate(a.end_at) : new Date(aStart.getTime() + 60 * 60 * 1000);
+      const isOngoing = aStart.getTime() <= now.getTime() && aEnd.getTime() >= now.getTime();
+      const isPast = aEnd.getTime() < now.getTime();
+      const isStartToday = format(aStart, "yyyy-MM-dd") === todayStr;
+
+      const timeFormatted = isStartToday
+        ? format(aStart, "HH:mm") + (a.end_at ? ` - ${format(aEnd, "HH:mm")}` : "")
+        : format(aStart, "dd MMM · HH:mm") + (a.end_at ? ` - ${format(aEnd, "HH:mm")}` : "");
+
+      const color = isOngoing
+        ? "bg-primary ring-2 ring-primary/30"
+        : isPast
+        ? "bg-muted/40"
+        : "bg-[#00D589]";
+
+      return {
+        id: a.id,
+        title: a.title,
+        time: timeFormatted,
+        color,
+        href: "/agenda",
+        isOngoing,
+        isPast,
+      };
+    });
+  }, [agendaEvents, now]);
 
   // ── Recent Notes ──
   const recentNotes = useMemo(() => {
@@ -409,40 +391,46 @@ export function DashboardContent() {
         <div className="lg:col-span-4 space-y-5">
           {/* Card 2A: Next Up */}
           {nextUp ? (
-            <Card padding="md" hover className="relative overflow-hidden bg-gradient-to-r from-surface to-[#F7F6FF]">
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-dark">
-                  <Clock className="w-3.5 h-3.5 text-primary" />
-                  <span>Next Up</span>
+            <Link
+              href={nextUp.href}
+              className="block group rounded-2xl lg:rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            >
+              <Card padding="md" hover className="relative overflow-hidden bg-gradient-to-r from-surface to-[#F7F6FF]">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-dark">
+                    <Clock className="w-3.5 h-3.5 text-primary" />
+                    <span>Next Up</span>
+                  </div>
+                  <div className="w-7 h-7 rounded-full bg-white border border-border shadow-sm flex items-center justify-center text-muted-dark group-hover:text-primary group-hover:border-primary transition-colors">
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </div>
                 </div>
-                <Link
-                  href={nextUp.href}
-                  className="w-7 h-7 rounded-full bg-white border border-border shadow-sm flex items-center justify-center text-muted-dark hover:text-primary hover:border-primary transition-colors"
-                >
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
 
-              <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-soft-accent flex items-center justify-center shrink-0 text-primary">
-                  <CalendarDays className="w-6 h-6" />
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-soft-accent flex items-center justify-center shrink-0 text-primary">
+                    {nextUp.type === "Agenda" ? (
+                      <CalendarClock className="w-6 h-6" />
+                    ) : (
+                      <CalendarDays className="w-6 h-6" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-bold text-base text-foreground truncate group-hover:text-primary transition-colors">
+                      {nextUp.title}
+                    </h3>
+                    <p className="text-xs font-semibold text-primary mt-0.5">
+                      {nextUp.time}
+                    </p>
+                    <p className="text-xs text-muted flex items-center gap-1 mt-0.5 truncate">
+                      <MapPin className="w-3 h-3 text-muted shrink-0" />
+                      <span>{nextUp.location}</span>
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-bold text-base text-foreground truncate">
-                    {nextUp.title}
-                  </h3>
-                  <p className="text-xs font-semibold text-primary mt-0.5">
-                    {nextUp.time}
-                  </p>
-                  <p className="text-xs text-muted flex items-center gap-1 mt-0.5 truncate">
-                    <MapPin className="w-3 h-3 text-muted shrink-0" />
-                    <span>{nextUp.location}</span>
-                  </p>
-                </div>
-              </div>
-            </Card>
+              </Card>
+            </Link>
           ) : (
-            <Card padding="md" className="flex items-center justify-center py-6 text-center">
+            <Card padding="md" hover className="flex items-center justify-center py-6 text-center">
               <div>
                 <p className="text-sm font-semibold text-foreground">Semua aktivitas hari ini selesai!</p>
                 <p className="text-xs text-muted mt-1">Istirahat dan siapkan rencana esok hari.</p>
@@ -451,7 +439,7 @@ export function DashboardContent() {
           )}
 
           {/* Card 2B: Today's Schedule Timeline */}
-          <Card padding="md" className="space-y-4">
+          <Card padding="md" hover className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CalendarDays className="w-4 h-4 text-primary" />
@@ -475,43 +463,73 @@ export function DashboardContent() {
                   Tidak ada kelas hari ini. Nikmati waktu luangmu!
                 </div>
               ) : (
-                todaySchedules.map((s, idx) => {
-                  const isCurrent = idx === 1; // Highlight second schedule like reference
-                  return (
-                    <div
-                      key={s.id}
-                      className={`flex items-center gap-3 p-2.5 rounded-2xl transition-all ${
-                        isCurrent
-                          ? "bg-soft-accent/80 border border-primary/20"
-                          : "hover:bg-surface-muted"
-                      }`}
-                    >
-                      <span className="text-xs font-semibold text-muted-dark w-12 shrink-0">
-                        {s.start_time}
-                      </span>
-                      <div
-                        className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                          idx === 0
-                            ? "bg-[#7A7AFF]"
-                            : idx === 1
-                            ? "bg-primary"
-                            : "bg-[#00D589]"
-                        }`}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-foreground truncate">
-                          {s.course_name}
-                        </p>
-                        <p className="text-[11px] text-muted truncate">
-                          {s.location || "Ruang Kelas"}
-                        </p>
-                      </div>
-                      {isCurrent && (
-                        <ChevronRight className="w-4 h-4 text-primary shrink-0" />
-                      )}
-                    </div>
+                (() => {
+                  const currentTime = format(now, "HH:mm");
+                  const ongoingSched = todaySchedules.find(
+                    (s) => currentTime >= s.start_time && currentTime <= s.end_time
                   );
-                })
+                  const nextUpcomingSched = !ongoingSched
+                    ? todaySchedules.find((s) => s.start_time > currentTime)
+                    : null;
+
+                  return todaySchedules.map((s) => {
+                    const isOngoing = currentTime >= s.start_time && currentTime <= s.end_time;
+                    const isUpcoming = currentTime < s.start_time;
+                    const isCompleted = currentTime > s.end_time;
+                    const isHighlighted = isOngoing || (!ongoingSched && s.id === nextUpcomingSched?.id);
+
+                    const dotColor = isOngoing
+                      ? "bg-primary ring-2 ring-primary/30 animate-pulse"
+                      : isUpcoming
+                      ? "bg-[#7A7AFF]"
+                      : "bg-muted/40";
+
+                    return (
+                      <Link
+                        key={s.id}
+                        href="/calendar"
+                        className={`flex items-center gap-3 p-2.5 rounded-2xl transition-all group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                          isHighlighted
+                            ? "bg-soft-accent/80 border border-primary/20"
+                            : "hover:bg-surface-muted border border-transparent"
+                        }`}
+                      >
+                        <span className={`text-xs font-semibold w-12 shrink-0 ${isCompleted ? "text-muted" : "text-muted-dark"}`}>
+                          {s.start_time}
+                        </span>
+                        <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${dotColor}`} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className={`text-xs font-bold truncate group-hover:text-primary transition-colors ${
+                              isCompleted ? "text-muted-dark line-through decoration-muted/40" : "text-foreground"
+                            }`}>
+                              {s.course_name}
+                            </p>
+                            {isOngoing && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary">
+                                Sedang Berlangsung
+                              </span>
+                            )}
+                            {!ongoingSched && s.id === nextUpcomingSched?.id && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#7A7AFF]/15 text-[#5151E5]">
+                                Berikutnya
+                              </span>
+                            )}
+                            {isCompleted && (
+                              <span className="text-[10px] text-muted">
+                                Selesai
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-muted truncate">
+                            {s.location || "Ruang Kelas"}
+                          </p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-muted group-hover:text-primary transition-colors shrink-0" />
+                      </Link>
+                    );
+                  });
+                })()
               )}
             </div>
           </Card>
@@ -523,7 +541,7 @@ export function DashboardContent() {
             ========================================= */}
         <div className="lg:col-span-3 space-y-5">
           {/* Card 3A: Activity Timeline */}
-          <Card padding="md" className="space-y-3.5">
+          <Card padding="md" hover className="space-y-3.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ActivityIcon className="w-4 h-4 text-primary" />
@@ -539,16 +557,16 @@ export function DashboardContent() {
             </div>
 
             <div className="space-y-2">
-              {todayActivities.length === 0 ? (
+              {activityItems.length === 0 ? (
                 <div className="py-4 text-center text-xs text-muted">
-                  Belum ada aktivitas hari ini.
+                  Belum ada agenda kegiatan.
                 </div>
               ) : (
-                todayActivities.map((act) => (
+                activityItems.map((act) => (
                   <Link
                     key={act.id}
                     href={act.href}
-                    className="flex items-center justify-between p-2 rounded-xl hover:bg-surface-muted transition-colors group cursor-pointer"
+                    className="flex items-center justify-between p-2 rounded-xl hover:bg-surface-muted transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className={`w-2 h-2 rounded-full shrink-0 ${act.color}`} />
@@ -567,7 +585,7 @@ export function DashboardContent() {
           </Card>
 
           {/* Card 3B: Urgent Tasks */}
-          <Card padding="md" className="space-y-3.5">
+          <Card padding="md" hover className="space-y-3.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CheckSquare className="w-4 h-4 text-primary" />
@@ -591,14 +609,19 @@ export function DashboardContent() {
                 urgentTasks.map((t) => {
                   const overdue = isOverdue(t, now);
                   return (
-                    <div
+                    <Link
                       key={t.id}
-                      className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-surface-muted transition-colors group"
+                      href="/tasks"
+                      className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-surface-muted transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     >
                       {/* Checkbox button */}
                       <button
                         type="button"
-                        onClick={() => toggleTask(t.id)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleTask(t.id);
+                        }}
                         className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
                           t.status === "done"
                             ? "bg-primary border-primary text-white"
@@ -614,7 +637,7 @@ export function DashboardContent() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <p
-                            className={`text-xs font-bold truncate ${
+                            className={`text-xs font-bold truncate group-hover:text-primary transition-colors ${
                               t.status === "done"
                                 ? "line-through text-muted"
                                 : "text-foreground"
@@ -636,7 +659,7 @@ export function DashboardContent() {
                       </div>
 
                       <ChevronRight className="w-3.5 h-3.5 text-muted shrink-0 group-hover:text-primary transition-colors" />
-                    </div>
+                    </Link>
                   );
                 })
               )}
@@ -650,7 +673,7 @@ export function DashboardContent() {
             ========================================= */}
         <div className="lg:col-span-3 space-y-5">
           {/* Card 4A: Focus Banner (Hero Purple Accent) */}
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#7A7AFF] via-[#6F6FFF] to-[#5151E5] text-white p-5 sm:p-6 shadow-glow">
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#7A7AFF] via-[#6F6FFF] to-[#5151E5] text-white p-5 sm:p-6 shadow-glow transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-hover">
             {/* Background 3D glass star graphic */}
             <div className="absolute -right-4 -bottom-4 w-28 h-28 opacity-25 pointer-events-none">
               <svg viewBox="0 0 100 100" fill="currentColor">
@@ -686,7 +709,7 @@ export function DashboardContent() {
           </div>
 
           {/* Card 4B: Motivation & Quick Actions Panel */}
-          <Card padding="md" className="space-y-4">
+          <Card padding="md" hover className="space-y-4">
             {/* Motivational message with Crescent Moon */}
             <div className="text-center py-2 px-1">
               <div className="w-10 h-10 mx-auto rounded-full bg-soft-accent flex items-center justify-center text-primary mb-2 shadow-sm">
@@ -767,7 +790,7 @@ export function DashboardContent() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-start">
         
         {/* Card 5A: Upcoming Agenda (lg:col-span-7) */}
-        <Card padding="md" className="lg:col-span-7 space-y-4">
+        <Card padding="md" hover className="lg:col-span-7 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <CalendarClock className="w-4 h-4 text-primary" />
@@ -842,7 +865,7 @@ export function DashboardContent() {
         </Card>
 
         {/* Card 5B: Recent Notes (lg:col-span-5) */}
-        <Card padding="md" className="lg:col-span-5 space-y-4">
+        <Card padding="md" hover className="lg:col-span-5 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <StickyNote className="w-4 h-4 text-primary" />
