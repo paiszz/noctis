@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale/id";
 import {
@@ -16,20 +16,30 @@ import {
 import { Card, Badge, Button, EmptyState, Modal } from "@/components/ui";
 import { useData } from "@/lib/data-context";
 import { toJakartaDate } from "@/lib/date";
-import type { AgendaEvent } from "@/types";
+import { type AgendaEvent, isUpcomingAgenda, isPastAgenda } from "@/types";
 import { AgendaFormModal } from "./AgendaFormModal";
 import { toast } from "sonner";
 
 export function AgendaView() {
-  const { agendaEvents, deleteAgendaEvent } = useData();
+  const { agendaEvents, deleteAgendaEvent, isLoaded } = useData();
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [now] = useState<Date>(() => toJakartaDate(new Date()));
+  const [now, setNow] = useState<Date>(() => toJakartaDate(new Date()));
+
+  useEffect(() => {
+    // Keep Asia/Jakarta time synchronized on client mount and update every minute
+    setNow(toJakartaDate(new Date()));
+    const timer = setInterval(() => {
+      setNow(toJakartaDate(new Date()));
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Modal states
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAgenda, setEditingAgenda] = useState<AgendaEvent | null>(null);
   const [agendaToDelete, setAgendaToDelete] = useState<AgendaEvent | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const filteredEvents = useMemo(() => {
     let list = [...agendaEvents];
@@ -52,20 +62,14 @@ export function AgendaView() {
     return list;
   }, [agendaEvents, searchQuery]);
 
-  // Separate upcoming vs past accurately based on event end_at (or start_at if no end_at)
+  // Separate upcoming vs past accurately based on start_at (date and time in WIB)
   const upcoming = useMemo(() => {
-    return filteredEvents.filter((a) => {
-      const eventTime = a.end_at ? new Date(a.end_at) : new Date(a.start_at);
-      return eventTime >= now;
-    });
+    return filteredEvents.filter((a) => isUpcomingAgenda(a, now));
   }, [filteredEvents, now]);
 
   const past = useMemo(() => {
     return filteredEvents
-      .filter((a) => {
-        const eventTime = a.end_at ? new Date(a.end_at) : new Date(a.start_at);
-        return eventTime < now;
-      })
+      .filter((a) => isPastAgenda(a, now))
       .reverse(); // Most recently completed first
   }, [filteredEvents, now]);
 
@@ -79,13 +83,42 @@ export function AgendaView() {
     setIsFormOpen(true);
   };
 
-  const confirmDelete = () => {
-    if (agendaToDelete) {
-      deleteAgendaEvent(agendaToDelete.id);
+  const confirmDelete = async () => {
+    if (!agendaToDelete) return;
+    try {
+      setIsDeleting(true);
+      await deleteAgendaEvent(agendaToDelete.id);
       toast.success(`Agenda "${agendaToDelete.title}" telah dihapus.`);
       setAgendaToDelete(null);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Gagal menghapus agenda kegiatan. Silakan periksa koneksi internet.";
+      toast.error(msg);
+    } finally {
+      setIsDeleting(false);
     }
   };
+
+  if (!isLoaded) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-5 animate-pulse">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-2">
+            <div className="h-8 w-44 bg-muted/20 rounded-lg" />
+            <div className="h-4 w-60 bg-muted/15 rounded" />
+          </div>
+          <div className="h-9 w-32 bg-muted/20 rounded-xl" />
+        </div>
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} padding="sm" className="h-20 bg-surface/60" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
@@ -367,6 +400,7 @@ export function AgendaView() {
             <Button
               variant="ghost"
               size="sm"
+              disabled={isDeleting}
               onClick={() => setAgendaToDelete(null)}
             >
               Batal
@@ -374,9 +408,10 @@ export function AgendaView() {
             <Button
               variant="danger"
               size="sm"
+              disabled={isDeleting}
               onClick={confirmDelete}
             >
-              Hapus Agenda
+              {isDeleting ? "Menghapus..." : "Hapus Agenda"}
             </Button>
           </div>
         </div>

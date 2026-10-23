@@ -27,7 +27,7 @@ import Link from "next/link";
 import { Card, Badge, Button, priorityVariant } from "@/components/ui";
 import { useData } from "@/lib/data-context";
 import { toJakartaDate } from "@/lib/date";
-import { isOverdue, PRIORITY_LABELS } from "@/types";
+import { isOverdue, isUpcomingAgenda, isPastAgenda, PRIORITY_LABELS } from "@/types";
 import type { DayOfWeek, CourseSchedule, Task, AgendaEvent, Note } from "@/types";
 import { toast } from "sonner";
 
@@ -98,7 +98,7 @@ export function DashboardContent() {
     }
 
     const upcoming = agendaEvents
-      .filter((a) => new Date(a.start_at) >= now)
+      .filter((a) => isUpcomingAgenda(a, now))
       .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
 
     if (upcoming.length > 0) {
@@ -148,14 +148,14 @@ export function DashboardContent() {
   // ── Agenda Events (Upcoming vs Completed) ──
   const upcomingEvents = useMemo(() => {
     return agendaEvents
-      .filter((a) => new Date(a.end_at || a.start_at) >= now)
+      .filter((a) => isUpcomingAgenda(a, now))
       .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
       .slice(0, 2);
   }, [agendaEvents, now]);
 
   const pastEvents = useMemo(() => {
     return agendaEvents
-      .filter((a) => new Date(a.end_at || a.start_at) < now)
+      .filter((a) => isPastAgenda(a, now))
       .sort((a, b) => new Date(b.start_at).getTime() - new Date(a.start_at).getTime())
       .slice(0, 2);
   }, [agendaEvents, now]);
