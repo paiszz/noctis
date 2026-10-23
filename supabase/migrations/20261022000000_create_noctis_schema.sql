@@ -191,13 +191,20 @@ BEGIN
     pg_catalog.split_part(NEW.email, '@', 1),
     'User'
   );
-  clean_name := pg_catalog.nullif(pg_catalog.trim(raw_name), '');
-  IF clean_name IS NULL THEN
+  clean_name := pg_catalog.btrim(raw_name);
+  IF clean_name = '' OR clean_name IS NULL THEN
     clean_name := 'User';
   END IF;
 
   raw_title := NEW.raw_user_meta_data->>'title';
-  clean_title := COALESCE(pg_catalog.nullif(pg_catalog.trim(raw_title), ''), 'Personal Workspace');
+  IF raw_title IS NOT NULL THEN
+    clean_title := pg_catalog.btrim(raw_title);
+    IF clean_title = '' THEN
+      clean_title := 'Personal Workspace';
+    END IF;
+  ELSE
+    clean_title := 'Personal Workspace';
+  END IF;
 
   -- 1. Initialize profile
   INSERT INTO public.profiles (id, name, email, title, created_at, updated_at)

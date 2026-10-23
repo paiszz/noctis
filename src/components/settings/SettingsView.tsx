@@ -15,9 +15,13 @@ import {
   Moon,
   Sun,
   Laptop,
+  LogOut,
+  ShieldCheck,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Card, CardHeader, Button, Badge, Modal } from "@/components/ui";
 import { useData } from "@/lib/data-context";
+import { useAuth } from "@/lib/auth-context";
 import { noctisExportSchema } from "@/lib/validation/import-schema";
 import type { ValidatedNoctisExport } from "@/lib/validation/import-schema";
 import type { AppTheme } from "@/types";
@@ -42,6 +46,11 @@ export function SettingsView() {
     exportAllData,
     importAllData,
   } = useData();
+
+  const router = useRouter();
+  const { user, signOut } = useAuth();
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // Profile modal state
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -209,6 +218,21 @@ export function SettingsView() {
     }
   };
 
+  const handleConfirmLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await signOut();
+      toast.success("Berhasil keluar dari akun.");
+      router.push("/login");
+      router.refresh();
+    } catch {
+      toast.error("Gagal keluar dari akun. Silakan coba lagi.");
+    } finally {
+      setIsLoggingOut(false);
+      setIsLogoutModalOpen(false);
+    }
+  };
+
   const avatarInitial = profile.name ? profile.name.trim()[0].toUpperCase() : "U";
 
   return (
@@ -219,14 +243,27 @@ export function SettingsView() {
           title="Profil Pengguna"
           description="Informasi identitas akun dan personal workspace."
           action={
-            <Button
-              variant="outline"
-              size="sm"
-              icon={<Edit2 className="w-3.5 h-3.5" />}
-              onClick={() => setIsProfileModalOpen(true)}
-            >
-              Edit Profil
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                icon={<Edit2 className="w-3.5 h-3.5" />}
+                onClick={() => setIsProfileModalOpen(true)}
+              >
+                Edit Profil
+              </Button>
+              {user && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-danger hover:bg-danger-light border-danger/30"
+                  icon={<LogOut className="w-3.5 h-3.5 text-danger" />}
+                  onClick={() => setIsLogoutModalOpen(true)}
+                >
+                  Keluar
+                </Button>
+              )}
+            </div>
           }
         />
         <div className="flex items-center gap-4">
@@ -237,16 +274,26 @@ export function SettingsView() {
             <h3 className="font-bold text-base sm:text-lg text-foreground truncate">
               {profile.name}
             </h3>
-            <p className="text-sm text-muted-dark truncate">{profile.email}</p>
-            {profile.title && (
-              <Badge variant="default" className="mt-1.5 text-[11px]">
-                {profile.title}
-              </Badge>
-            )}
+            <p className="text-sm text-muted-dark truncate">{user?.email || profile.email}</p>
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+              {user ? (
+                <Badge variant="primary" className="text-[11px] flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3" />
+                  <span>Supabase Auth</span>
+                </Badge>
+              ) : null}
+              {profile.title && (
+                <Badge variant="default" className="text-[11px]">
+                  {profile.title}
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
         <p className="text-xs text-muted mt-4 border-t border-border/70 pt-3">
-          Perubahan profil disimpan di penyimpanan lokal perangkat dan akan disinkronkan ke cloud saat integrasi Supabase Auth aktif.
+          {user
+            ? `Terautentikasi sebagai ${user.email}. ID Pengguna: ${user.id.slice(0, 8)}...`
+            : "Perubahan profil disimpan di penyimpanan lokal perangkat."}
         </p>
       </Card>
 
@@ -615,6 +662,41 @@ export function SettingsView() {
               onClick={handleConfirmImport}
             >
               Ganti Data & Impor
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── 4. Logout Confirmation Modal ── */}
+      <Modal
+        isOpen={isLogoutModalOpen}
+        onClose={() => !isLoggingOut && setIsLogoutModalOpen(false)}
+        title="Konfirmasi Keluar Akun"
+        description="Apakah Anda yakin ingin mengakhiri sesi login saat ini?"
+        maxWidth="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-muted-dark leading-relaxed">
+            Sesi Anda pada perangkat ini akan diakhiri. Anda perlu memasukkan email dan kata sandi kembali untuk mengakses akun Anda.
+          </p>
+
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border/70">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={isLoggingOut}
+              onClick={() => setIsLogoutModalOpen(false)}
+            >
+              Batal
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={isLoggingOut}
+              className="bg-danger hover:bg-danger/90 text-white"
+              onClick={handleConfirmLogout}
+            >
+              {isLoggingOut ? "Sedang keluar..." : "Keluar Akun"}
             </Button>
           </div>
         </div>

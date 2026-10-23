@@ -39,6 +39,7 @@ export async function createClient(): Promise<SupabaseClient | null> {
 }
 
 /**
- * Explicit server client getter
+ * Explicit server client getter aliases
  */
 export const getServerClient = createClient;
+export const createServerClientInstance = createClient;
