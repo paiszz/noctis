@@ -17,6 +17,7 @@ import {
   Laptop,
   LogOut,
   ShieldCheck,
+  Loader2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Card, CardHeader, Button, Badge, Modal } from "@/components/ui";
@@ -45,6 +46,8 @@ export function SettingsView() {
     setNotificationPreference,
     exportAllData,
     importAllData,
+    isLoaded,
+    isProfileLoading,
   } = useData();
 
   const router = useRouter();
@@ -61,6 +64,7 @@ export function SettingsView() {
     name?: string;
     email?: string;
   }>({});
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Browser notification permission state (safe from SSR hydration mismatch)
   const [browserPermission, setBrowserPermission] = useState<
@@ -102,7 +106,7 @@ export function SettingsView() {
 
   // ── Handlers ──
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     const errors: { name?: string; email?: string } = {};
 
@@ -110,9 +114,11 @@ export function SettingsView() {
       errors.name = "Nama tidak boleh kosong.";
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailInput.trim() || !emailRegex.test(emailInput.trim())) {
-      errors.email = "Format alamat email tidak valid.";
+    if (!user) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailInput.trim() || !emailRegex.test(emailInput.trim())) {
+        errors.email = "Format alamat email tidak valid.";
+      }
     }
 
     if (Object.keys(errors).length > 0) {
@@ -120,14 +126,23 @@ export function SettingsView() {
       return;
     }
 
-    updateProfile({
-      name: nameInput.trim(),
-      email: emailInput.trim(),
-      title: titleInput.trim() || undefined,
-    });
+    setIsSavingProfile(true);
+    try {
+      await updateProfile({
+        name: nameInput.trim(),
+        email: user ? undefined : emailInput.trim(),
+        title: titleInput.trim() || undefined,
+      });
 
-    toast.success("Profil berhasil diperbarui.");
-    setIsProfileModalOpen(false);
+      toast.success("Profil berhasil diperbarui.");
+      setIsProfileModalOpen(false);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Terjadi kesalahan saat menyimpan profil ke server.";
+      toast.error(`Gagal menyimpan profil: ${message}`);
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   const handleRequestBrowserPermission = async () => {
@@ -266,30 +281,41 @@ export function SettingsView() {
             </div>
           }
         />
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-primary/20 to-primary/40 border-2 border-white shadow-sm flex items-center justify-center text-primary font-bold text-2xl shrink-0">
-            {avatarInitial}
-          </div>
-          <div className="min-w-0">
-            <h3 className="font-bold text-base sm:text-lg text-foreground truncate">
-              {profile.name}
-            </h3>
-            <p className="text-sm text-muted-dark truncate">{user?.email || profile.email}</p>
-            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-              {user ? (
-                <Badge variant="primary" className="text-[11px] flex items-center gap-1">
-                  <ShieldCheck className="w-3 h-3" />
-                  <span>Supabase Auth</span>
-                </Badge>
-              ) : null}
-              {profile.title && (
-                <Badge variant="default" className="text-[11px]">
-                  {profile.title}
-                </Badge>
-              )}
+        {!isLoaded || isProfileLoading ? (
+          <div className="flex items-center gap-4 animate-pulse">
+            <div className="w-16 h-16 rounded-2xl bg-muted/20 shrink-0" />
+            <div className="min-w-0 space-y-2 flex-1">
+              <div className="h-5 w-40 bg-muted/25 rounded" />
+              <div className="h-4 w-48 bg-muted/20 rounded" />
+              <div className="h-4 w-24 bg-muted/15 rounded" />
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-primary/20 to-primary/40 border-2 border-white shadow-sm flex items-center justify-center text-primary font-bold text-2xl shrink-0">
+              {avatarInitial}
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-bold text-base sm:text-lg text-foreground truncate">
+                {profile.name || "User"}
+              </h3>
+              <p className="text-sm text-muted-dark truncate">{user?.email || profile.email}</p>
+              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                {user ? (
+                  <Badge variant="primary" className="text-[11px] flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3" />
+                    <span>Supabase Auth</span>
+                  </Badge>
+                ) : null}
+                {profile.title && (
+                  <Badge variant="default" className="text-[11px]">
+                    {profile.title}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         <p className="text-xs text-muted mt-4 border-t border-border/70 pt-3">
           {user
             ? `Terautentikasi sebagai ${user.email}. ID Pengguna: ${user.id.slice(0, 8)}...`
@@ -333,12 +359,18 @@ export function SettingsView() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     const nextVal = !isEnabled;
-                    setNotificationPreference(pref.key, nextVal);
-                    toast.success(
-                      `${pref.label} ${nextVal ? "diaktifkan" : "dinonaktifkan"}.`
-                    );
+                    try {
+                      await setNotificationPreference(pref.key, nextVal);
+                      toast.success(
+                        `${pref.label} ${nextVal ? "diaktifkan" : "dinonaktifkan"}.`
+                      );
+                    } catch (err: unknown) {
+                      const msg =
+                        err instanceof Error ? err.message : "Gagal memperbarui preferensi notifikasi.";
+                      toast.error(`Gagal mengubah preferensi: ${msg}`);
+                    }
                   }}
                   className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 ${
                     isEnabled ? "bg-primary" : "bg-border"
@@ -430,9 +462,15 @@ export function SettingsView() {
                   <button
                     key={t.value}
                     type="button"
-                    onClick={() => {
-                      updatePreferences({ theme: t.value });
-                      toast.success(`Tema diubah ke mode ${t.label}.`);
+                    onClick={async () => {
+                      try {
+                        await updatePreferences({ theme: t.value });
+                        toast.success(`Tema diubah ke mode ${t.label}.`);
+                      } catch (err: unknown) {
+                        const msg =
+                          err instanceof Error ? err.message : "Gagal mengubah tema.";
+                        toast.error(`Gagal mengubah tema: ${msg}`);
+                      }
                     }}
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                       isActive
@@ -462,11 +500,19 @@ export function SettingsView() {
 
             <select
               value={currentTimezone}
-              onChange={(e) => {
+              onChange={async (e) => {
                 const tz = e.target.value;
+                const prevTz = currentTimezone;
                 setCurrentTimezone(tz);
-                updatePreferences({ timezone: tz });
-                toast.success(`Zona waktu diatur ke ${tz}.`);
+                try {
+                  await updatePreferences({ timezone: tz });
+                  toast.success(`Zona waktu diatur ke ${tz}.`);
+                } catch (err: unknown) {
+                  setCurrentTimezone(prevTz);
+                  const msg =
+                    err instanceof Error ? err.message : "Gagal mengubah zona waktu.";
+                  toast.error(`Gagal mengubah zona waktu: ${msg}`);
+                }
               }}
               className="bg-surface border border-border/80 text-foreground text-xs sm:text-sm rounded-xl px-3 py-2 shadow-sm focus:outline-none focus:border-border-focus cursor-pointer shrink-0"
               aria-label="Pilih zona waktu"
@@ -561,23 +607,30 @@ export function SettingsView() {
               htmlFor="profile-email"
               className="block text-xs font-semibold text-foreground mb-1"
             >
-              Alamat Email <span className="text-danger">*</span>
+              Alamat Email {user ? "" : <span className="text-danger">*</span>}
             </label>
             <input
               id="profile-email"
               type="email"
-              required
-              value={emailInput}
+              required={!user}
+              disabled={Boolean(user)}
+              value={user ? (user.email || profile.email) : emailInput}
               onChange={(e) => {
                 setEmailInput(e.target.value);
                 if (profileErrors.email) setProfileErrors((p) => ({ ...p, email: undefined }));
               }}
               placeholder="email@example.com"
-              className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus"
+              className={`w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus ${
+                user ? "opacity-75 cursor-not-allowed bg-border/20" : ""
+              }`}
             />
-            {profileErrors.email && (
+            {user ? (
+              <p className="text-[11px] text-muted mt-1">
+                Alamat email akun terhubung dengan Supabase Auth dan tidak dapat diubah di sini.
+              </p>
+            ) : profileErrors.email ? (
               <p className="text-xs text-danger mt-1">{profileErrors.email}</p>
-            )}
+            ) : null}
           </div>
 
           <div>
@@ -602,12 +655,20 @@ export function SettingsView() {
               type="button"
               variant="ghost"
               size="sm"
+              disabled={isSavingProfile}
               onClick={() => setIsProfileModalOpen(false)}
             >
               Batal
             </Button>
-            <Button type="submit" size="sm">
-              Simpan Profil
+            <Button type="submit" size="sm" disabled={isSavingProfile}>
+              {isSavingProfile ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                  Menyimpan...
+                </>
+              ) : (
+                "Simpan Profil"
+              )}
             </Button>
           </div>
         </form>
