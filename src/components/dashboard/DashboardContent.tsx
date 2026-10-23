@@ -43,6 +43,9 @@ export function DashboardContent() {
     agendaEvents,
     profile,
     exportAllData,
+    isLoaded,
+    isProfileLoading,
+    isDataLoading,
   } = useData();
 
 
@@ -118,9 +121,13 @@ export function DashboardContent() {
   const completedTasks = tasks.filter((t) => t.status === "done").length;
   const taskProgressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
-  // Toggle task status locally
-  const toggleTask = (taskId: string) => {
-    toggleTaskStatus(taskId);
+  // Toggle task status
+  const toggleTask = async (taskId: string) => {
+    try {
+      await toggleTaskStatus(taskId);
+    } catch {
+      toast.error("Gagal memperbarui status tugas di cloud.");
+    }
   };
 
   // Urgent tasks (todo or in_progress, overdue or due earliest)
@@ -224,13 +231,56 @@ export function DashboardContent() {
     }
   };
 
+  if (!isLoaded) {
+    return (
+      <div className="space-y-6 lg:space-y-7 animate-pulse">
+        {/* Dashboard Header Skeleton */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+          <div className="space-y-2">
+            <div className="h-9 sm:h-10 w-64 bg-muted/20 rounded-xl" />
+            <div className="h-4 w-48 bg-muted/15 rounded" />
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-32 bg-muted/20 rounded-full" />
+            <div className="h-9 w-28 bg-muted/20 rounded-full" />
+          </div>
+        </div>
+
+        {/* Main Asymmetric 4-Column Grid Skeleton */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-5 lg:gap-6 items-start">
+          <div className="lg:col-span-2 space-y-5">
+            <Card padding="md" className="h-[220px] bg-surface/60" />
+            <Card padding="md" className="h-[160px] bg-surface/60" />
+          </div>
+          <div className="lg:col-span-4 space-y-5">
+            <Card padding="md" className="h-[140px] bg-surface/60" />
+            <Card padding="md" className="h-[240px] bg-surface/60" />
+          </div>
+          <div className="lg:col-span-3 space-y-5">
+            <Card padding="md" className="h-[180px] bg-surface/60" />
+            <Card padding="md" className="h-[200px] bg-surface/60" />
+          </div>
+          <div className="lg:col-span-3 space-y-5">
+            <Card padding="md" className="h-[180px] bg-primary/20" />
+            <Card padding="md" className="h-[200px] bg-surface/60" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 lg:space-y-7">
       {/* ── Dashboard Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
         <div>
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
-            {greeting}, {profile?.name || "Faiz"}.
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground flex items-center flex-wrap gap-2">
+            <span>{greeting},</span>
+            {isProfileLoading ? (
+              <span className="inline-block w-40 h-8 sm:h-9 bg-muted/25 animate-pulse rounded-lg" />
+            ) : (
+              <span>{profile?.name || "User"}.</span>
+            )}
           </h1>
           <p className="text-sm sm:text-base text-muted-dark font-medium mt-1">
             Keep going. Your goals are closer than you think.
@@ -605,7 +655,12 @@ export function DashboardContent() {
 
             <div className="relative z-10 space-y-3">
               <h2 className="text-lg sm:text-xl font-extrabold leading-snug">
-                Focus on what matters, {profile?.name || "Faiz"}.
+                Focus on what matters,{" "}
+                {isProfileLoading ? (
+                  <span className="inline-block w-24 h-5 bg-white/30 animate-pulse rounded align-middle" />
+                ) : (
+                  profile?.name || "User"
+                )}.
               </h2>
               <p className="text-xs text-white/90 leading-relaxed max-w-[220px]">
                 Small steps every day lead to big results.
@@ -633,7 +688,12 @@ export function DashboardContent() {
                 <Moon className="w-5 h-5 fill-primary/20" />
               </div>
               <h3 className="font-bold text-xs sm:text-sm text-foreground">
-                You&apos;re doing great, {profile?.name || "Faiz"}.
+                You&apos;re doing great,{" "}
+                {isProfileLoading ? (
+                  <span className="inline-block w-20 h-4 bg-muted/20 animate-pulse rounded align-middle" />
+                ) : (
+                  profile?.name || "User"
+                )}.
               </h3>
               <p className="text-[11px] text-muted mt-0.5">
                 Stay consistent, keep going.

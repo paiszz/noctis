@@ -38,7 +38,7 @@ const STATUS_FILTERS: { value: FilterStatus; label: string }[] = [
 ];
 
 export function TasksView() {
-  const { tasks, toggleTaskStatus, deleteTask, schedules } = useData();
+  const { tasks, toggleTaskStatus, deleteTask, schedules, isLoaded } = useData();
 
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [filterPriority, setFilterPriority] = useState<FilterPriority>("all");
@@ -126,13 +126,42 @@ export function TasksView() {
     setIsFormOpen(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (taskToDelete) {
-      deleteTask(taskToDelete.id);
-      toast.success(`Tugas "${taskToDelete.title}" telah dihapus.`);
-      setTaskToDelete(null);
+      try {
+        await deleteTask(taskToDelete.id);
+        toast.success(`Tugas "${taskToDelete.title}" telah dihapus.`);
+        setTaskToDelete(null);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Gagal menghapus tugas dari cloud.";
+        toast.error(msg);
+      }
     }
   };
+
+  if (!isLoaded) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-5 animate-pulse">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-2">
+            <div className="h-8 w-44 bg-muted/20 rounded-lg" />
+            <div className="h-4 w-60 bg-muted/15 rounded" />
+          </div>
+          <div className="h-9 w-32 bg-muted/20 rounded-xl" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i} padding="sm" className="h-20 bg-surface/60" />
+          ))}
+        </div>
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} padding="sm" className="h-16 bg-surface/60" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
@@ -286,13 +315,21 @@ export function TasksView() {
                   {/* Interactive Checkbox */}
                   <button
                     type="button"
-                    onClick={() => {
-                      toggleTaskStatus(t.id);
-                      toast.success(
-                        t.status === "done"
-                          ? `Tugas "${t.title}" ditandai belum selesai.`
-                          : `Selamat! Tugas "${t.title}" selesai.`
-                      );
+                    onClick={async () => {
+                      try {
+                        await toggleTaskStatus(t.id);
+                        toast.success(
+                          t.status === "done"
+                            ? `Tugas "${t.title}" ditandai belum selesai.`
+                            : `Selamat! Tugas "${t.title}" selesai.`
+                        );
+                      } catch (err: unknown) {
+                        const msg =
+                          err instanceof Error
+                            ? err.message
+                            : "Gagal memperbarui status tugas di cloud.";
+                        toast.error(msg);
+                      }
                     }}
                     className={`mt-0.5 w-5 h-5 rounded-lg border-2 shrink-0 flex items-center justify-center transition-all cursor-pointer ${
                       t.status === "done"

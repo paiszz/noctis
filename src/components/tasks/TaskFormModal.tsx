@@ -27,6 +27,7 @@ export function TaskFormModal({
   const [status, setStatus] = useState<TaskStatus>("todo");
   const [courseScheduleId, setCourseScheduleId] = useState<string>("");
   const [errors, setErrors] = useState<{ title?: string }>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (taskToEdit) {
@@ -63,7 +64,7 @@ export function TaskFormModal({
     setErrors({});
   }, [taskToEdit, isOpen]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!title.trim()) {
@@ -79,29 +80,36 @@ export function TaskFormModal({
       }
     }
 
-    if (taskToEdit) {
-      updateTask(taskToEdit.id, {
-        title,
-        description: description || undefined,
-        due_at: isoDueDate,
-        priority,
-        status,
-        course_schedule_id: courseScheduleId || undefined,
-      });
-      toast.success("Tugas berhasil diperbarui");
-    } else {
-      addTask({
-        title,
-        description: description || undefined,
-        due_at: isoDueDate,
-        priority,
-        status,
-        course_schedule_id: courseScheduleId || undefined,
-      });
-      toast.success("Tugas baru berhasil ditambahkan");
+    try {
+      setIsSubmitting(true);
+      if (taskToEdit) {
+        await updateTask(taskToEdit.id, {
+          title,
+          description: description || undefined,
+          due_at: isoDueDate,
+          priority,
+          status,
+          course_schedule_id: courseScheduleId || undefined,
+        });
+        toast.success("Tugas berhasil diperbarui");
+      } else {
+        await addTask({
+          title,
+          description: description || undefined,
+          due_at: isoDueDate,
+          priority,
+          status,
+          course_schedule_id: courseScheduleId || undefined,
+        });
+        toast.success("Tugas baru berhasil ditambahkan");
+      }
+      onClose();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Gagal menyimpan tugas. Silakan periksa koneksi internet.";
+      toast.error(msg);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    onClose();
   };
 
   return (
@@ -260,8 +268,12 @@ export function TaskFormModal({
           >
             Batal
           </Button>
-          <Button type="submit" size="sm">
-            {taskToEdit ? "Simpan Perubahan" : "Tambah Tugas"}
+          <Button type="submit" size="sm" disabled={isSubmitting}>
+            {isSubmitting
+              ? "Menyimpan..."
+              : taskToEdit
+              ? "Simpan Perubahan"
+              : "Tambah Tugas"}
           </Button>
         </div>
       </form>

@@ -7,6 +7,7 @@ import React, {
   useState,
   useCallback,
   useMemo,
+  useRef,
 } from "react";
 import type {
   Task,
@@ -28,20 +29,59 @@ import {
   mockSchedules as initialMockSchedules,
   mockAgendaEvents as initialMockAgendaEvents,
 } from "@/lib/mock-data";
+import { useAuth } from "@/lib/auth-context";
+import {
+  getUserProfile,
+  updateUserProfile as apiUpdateUserProfile,
+  getUserPreferences,
+  updateUserPreferences as apiUpdateUserPreferences,
+} from "@/lib/supabase/profile";
+import {
+  getUserTasks,
+  createUserTask,
+  updateUserTask,
+  deleteUserTask,
+} from "@/lib/supabase/tasks";
 
-const TASKS_STORAGE_KEY = "noctis_storage_tasks_v1";
-const NOTES_STORAGE_KEY = "noctis_storage_notes_v1";
-const SCHEDULES_STORAGE_KEY = "noctis_storage_schedules_v1";
-const AGENDA_STORAGE_KEY = "noctis_storage_agenda_v1";
-const PROFILE_STORAGE_KEY = "noctis_storage_profile_v1";
-const PREFERENCES_STORAGE_KEY = "noctis_storage_preferences_v1";
+export const LEGACY_STORAGE_KEYS = {
+  tasks: "noctis_storage_tasks_v1",
+  notes: "noctis_storage_notes_v1",
+  schedules: "noctis_storage_schedules_v1",
+  agenda: "noctis_storage_agenda_v1",
+  profile: "noctis_storage_profile_v1",
+  preferences: "noctis_storage_preferences_v1",
+} as const;
+
+export type ScopedResourceType =
+  | "tasks"
+  | "notes"
+  | "schedules"
+  | "agenda"
+  | "profile"
+  | "preferences";
+
+export function getScopedStorageKey(
+  userId: string | null | undefined,
+  resource: ScopedResourceType
+): string {
+  if (!userId) {
+    return LEGACY_STORAGE_KEYS[resource];
+  }
+  return `noctis_user_${userId}_${resource}_v1`;
+}
 
 const DEFAULT_USER_ID = "user-default";
 
-const DEFAULT_PROFILE: UserProfile = {
+const DEFAULT_GUEST_PROFILE: UserProfile = {
   name: "Faiz",
   email: "faiz@example.com",
   title: "Personal Workspace",
+};
+
+const EMPTY_PROFILE: UserProfile = {
+  name: "",
+  email: "",
+  title: "",
 };
 
 const DEFAULT_PREFERENCES: UserPreferences = {
@@ -100,10 +140,10 @@ export interface AgendaInput {
 interface DataContextType {
   // Tasks
   tasks: Task[];
-  addTask: (input: TaskInput) => Task;
-  updateTask: (id: string, updates: Partial<Omit<Task, "id" | "user_id">>) => void;
-  deleteTask: (id: string) => void;
-  toggleTaskStatus: (id: string) => void;
+  addTask: (input: TaskInput) => Promise<Task>;
+  updateTask: (id: string, updates: Partial<Omit<Task, "id" | "user_id">>) => Promise<void>;
+  deleteTask: (id: string) => Promise<void>;
+  toggleTaskStatus: (id: string) => Promise<void>;
 
   // Notes
   notes: Note[];
@@ -126,277 +166,725 @@ interface DataContextType {
 
   // Profile
   profile: UserProfile;
-  updateProfile: (updates: Partial<UserProfile>) => void;
+  updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
 
   // Preferences
   preferences: UserPreferences;
-  updatePreferences: (updates: Partial<UserPreferences>) => void;
-  setNotificationPreference: (category: keyof NotificationSettings, enabled: boolean) => void;
+  updatePreferences: (updates: Partial<UserPreferences>) => Promise<void>;
+  setNotificationPreference: (category: keyof NotificationSettings, enabled: boolean) => Promise<void>;
 
   // Data Management
   exportAllData: () => NoctisExportData;
   importAllData: (data: ValidatedNoctisExport) => void;
 
+  // Granular Loading States
+  isAuthLoading: boolean;
+  isProfileLoading: boolean;
+  isDataLoading: boolean;
   isLoaded: boolean;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const [tasks, setTasks] = useState<Task[]>(initialMockTasks);
-  const [notes, setNotes] = useState<Note[]>(initialMockNotes);
-  const [schedules, setSchedules] = useState<CourseSchedule[]>(initialMockSchedules);
-  const [agendaEvents, setAgendaEvents] = useState<AgendaEvent[]>(initialMockAgendaEvents);
-  const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
+  const { user, isLoading: isAuthLoading } = useAuth();
+
+  // Initialize with neutral / empty states to eliminate initial render flicker
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [schedules, setSchedules] = useState<CourseSchedule[]>([]);
+  const [agendaEvents, setAgendaEvents] = useState<AgendaEvent[]>([]);
+  const [profile, setProfile] = useState<UserProfile>(EMPTY_PROFILE);
   const [preferences, setPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
+
+  const [isDataLoading, setIsDataLoading] = useState(true);
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Initialize from localStorage on client mount (safe from SSR hydration mismatch)
+  const requestSeqRef = useRef<number>(0);
+  const prevUserIdRef = useRef<string | null | undefined>(undefined);
+
+  // 1. Unified lifecycle effect: waits for authentication status, isolates account states,
+  //    and safely synchronizes Tasks, Profile, and Preferences from Supabase.
   useEffect(() => {
-    try {
-      const storedTasks = localStorage.getItem(TASKS_STORAGE_KEY);
-      if (storedTasks) {
-        setTasks(JSON.parse(storedTasks));
-      } else {
-        localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(initialMockTasks));
-      }
-
-      const storedNotes = localStorage.getItem(NOTES_STORAGE_KEY);
-      if (storedNotes) {
-        setNotes(JSON.parse(storedNotes));
-      } else {
-        localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(initialMockNotes));
-      }
-
-      const storedSchedules = localStorage.getItem(SCHEDULES_STORAGE_KEY);
-      if (storedSchedules) {
-        setSchedules(JSON.parse(storedSchedules));
-      } else {
-        localStorage.setItem(SCHEDULES_STORAGE_KEY, JSON.stringify(initialMockSchedules));
-      }
-
-      const storedAgenda = localStorage.getItem(AGENDA_STORAGE_KEY);
-      if (storedAgenda) {
-        setAgendaEvents(JSON.parse(storedAgenda));
-      } else {
-        localStorage.setItem(AGENDA_STORAGE_KEY, JSON.stringify(initialMockAgendaEvents));
-      }
-
-      const storedProfile = localStorage.getItem(PROFILE_STORAGE_KEY);
-      if (storedProfile) {
-        setProfile(JSON.parse(storedProfile));
-      } else {
-        localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(DEFAULT_PROFILE));
-      }
-
-      const storedPrefs = localStorage.getItem(PREFERENCES_STORAGE_KEY);
-      if (storedPrefs) {
-        setPreferences(JSON.parse(storedPrefs));
-      } else {
-        localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(DEFAULT_PREFERENCES));
-      }
-    } catch (err) {
-      console.warn("Noctis: Could not read from localStorage, using fallback mock data.", err);
-    } finally {
-      setIsLoaded(true);
+    // If Supabase authentication is still verifying the session, wait before touching data.
+    if (isAuthLoading) {
+      return;
     }
-  }, []);
 
-  // Synchronize theme to document element class list
+    const seq = ++requestSeqRef.current;
+    const currentUserId = user?.id ?? null;
+    const isUserSwitched =
+      prevUserIdRef.current !== undefined && prevUserIdRef.current !== currentUserId;
+    prevUserIdRef.current = currentUserId;
+
+    setIsDataLoading(true);
+    setIsProfileLoading(true);
+    setIsLoaded(false);
+
+    // If account switched or user logged out, immediately purge in-memory state
+    // so previous user's tasks/notes never display for even a single frame
+    if (isUserSwitched) {
+      setTasks([]);
+      setNotes([]);
+      setSchedules([]);
+      setAgendaEvents([]);
+      setProfile(EMPTY_PROFILE);
+    }
+
+    if (!user) {
+      // ── GUEST MODE ──
+      // Preserve existing localStorage keys without deletion or auto-migration.
+      try {
+        const storedTasks = localStorage.getItem(LEGACY_STORAGE_KEYS.tasks);
+        if (storedTasks) {
+          setTasks(JSON.parse(storedTasks));
+        } else {
+          localStorage.setItem(
+            LEGACY_STORAGE_KEYS.tasks,
+            JSON.stringify(initialMockTasks)
+          );
+          setTasks(initialMockTasks);
+        }
+
+        const storedNotes = localStorage.getItem(LEGACY_STORAGE_KEYS.notes);
+        if (storedNotes) {
+          setNotes(JSON.parse(storedNotes));
+        } else {
+          localStorage.setItem(
+            LEGACY_STORAGE_KEYS.notes,
+            JSON.stringify(initialMockNotes)
+          );
+          setNotes(initialMockNotes);
+        }
+
+        const storedSchedules = localStorage.getItem(LEGACY_STORAGE_KEYS.schedules);
+        if (storedSchedules) {
+          setSchedules(JSON.parse(storedSchedules));
+        } else {
+          localStorage.setItem(
+            LEGACY_STORAGE_KEYS.schedules,
+            JSON.stringify(initialMockSchedules)
+          );
+          setSchedules(initialMockSchedules);
+        }
+
+        const storedAgenda = localStorage.getItem(LEGACY_STORAGE_KEYS.agenda);
+        if (storedAgenda) {
+          setAgendaEvents(JSON.parse(storedAgenda));
+        } else {
+          localStorage.setItem(
+            LEGACY_STORAGE_KEYS.agenda,
+            JSON.stringify(initialMockAgendaEvents)
+          );
+          setAgendaEvents(initialMockAgendaEvents);
+        }
+
+        const storedProfile = localStorage.getItem(LEGACY_STORAGE_KEYS.profile);
+        if (storedProfile) {
+          setProfile(JSON.parse(storedProfile));
+        } else {
+          localStorage.setItem(
+            LEGACY_STORAGE_KEYS.profile,
+            JSON.stringify(DEFAULT_GUEST_PROFILE)
+          );
+          setProfile(DEFAULT_GUEST_PROFILE);
+        }
+
+        const storedPrefs = localStorage.getItem(LEGACY_STORAGE_KEYS.preferences);
+        if (storedPrefs) {
+          setPreferences(JSON.parse(storedPrefs));
+        } else {
+          localStorage.setItem(
+            LEGACY_STORAGE_KEYS.preferences,
+            JSON.stringify(DEFAULT_PREFERENCES)
+          );
+          setPreferences(DEFAULT_PREFERENCES);
+        }
+      } catch (err) {
+        console.warn("Noctis: Could not read guest data from localStorage", err);
+        setTasks(initialMockTasks);
+        setNotes(initialMockNotes);
+        setSchedules(initialMockSchedules);
+        setAgendaEvents(initialMockAgendaEvents);
+        setProfile(DEFAULT_GUEST_PROFILE);
+        setPreferences(DEFAULT_PREFERENCES);
+      } finally {
+        if (seq === requestSeqRef.current) {
+          setIsDataLoading(false);
+          setIsProfileLoading(false);
+          setIsLoaded(true);
+        }
+      }
+    } else {
+      // ── AUTHENTICATED USER MODE ──
+      // Feature data is isolated using user-scoped storage keys.
+      // Tasks are fetched and synchronized directly with Supabase.
+      const scopedTasksKey = getScopedStorageKey(user.id, "tasks");
+      const scopedNotesKey = getScopedStorageKey(user.id, "notes");
+      const scopedSchedulesKey = getScopedStorageKey(user.id, "schedules");
+      const scopedAgendaKey = getScopedStorageKey(user.id, "agenda");
+      const scopedProfileKey = getScopedStorageKey(user.id, "profile");
+      const scopedPreferencesKey = getScopedStorageKey(user.id, "preferences");
+
+      // 1. Fast-path: read scoped local cache for immediate recovery
+      try {
+        const storedTasks = localStorage.getItem(scopedTasksKey);
+        if (storedTasks) {
+          setTasks(JSON.parse(storedTasks));
+        }
+
+        const storedNotes = localStorage.getItem(scopedNotesKey);
+        setNotes(storedNotes ? JSON.parse(storedNotes) : []);
+
+        const storedSchedules = localStorage.getItem(scopedSchedulesKey);
+        setSchedules(storedSchedules ? JSON.parse(storedSchedules) : []);
+
+        const storedAgenda = localStorage.getItem(scopedAgendaKey);
+        setAgendaEvents(storedAgenda ? JSON.parse(storedAgenda) : []);
+
+        const cachedProfile = localStorage.getItem(scopedProfileKey);
+        if (cachedProfile) {
+          setProfile(JSON.parse(cachedProfile));
+        } else {
+          const interimName =
+            user.user_metadata?.name || user.email?.split("@")[0] || "User";
+          const interimTitle =
+            user.user_metadata?.title || "Personal Workspace";
+          setProfile({
+            name: interimName,
+            email: user.email || "",
+            title: interimTitle,
+          });
+        }
+
+        const cachedPrefs = localStorage.getItem(scopedPreferencesKey);
+        if (cachedPrefs) {
+          setPreferences(JSON.parse(cachedPrefs));
+        }
+      } catch (err) {
+        console.warn("Noctis: Could not read scoped cache from localStorage", err);
+      }
+
+      // 2. Fetch Tasks, Profile, and Preferences concurrently from Supabase
+      const initialUserName =
+        user.user_metadata?.name || user.email?.split("@")[0] || "User";
+      const initialUserTitle =
+        user.user_metadata?.title || "Personal Workspace";
+      const currentUserIdForFetch = user.id;
+      const currentUserEmailForFetch = user.email;
+
+      async function loadSupabaseUserData() {
+        try {
+          const [profileRes, prefRes, tasksRes] = await Promise.all([
+            getUserProfile(currentUserIdForFetch, {
+              name: initialUserName,
+              email: currentUserEmailForFetch || undefined,
+              title: initialUserTitle,
+            }),
+            getUserPreferences(currentUserIdForFetch),
+            getUserTasks(currentUserIdForFetch),
+          ]);
+
+          // Discard results if user switched or another load was initiated
+          if (seq !== requestSeqRef.current) return;
+
+          // Tasks from Supabase
+          if (tasksRes.data) {
+            setTasks(tasksRes.data);
+            try {
+              localStorage.setItem(scopedTasksKey, JSON.stringify(tasksRes.data));
+            } catch (e) {
+              console.warn("Error caching scoped tasks", e);
+            }
+          } else if (tasksRes.error) {
+            console.error("Error loading user tasks from Supabase:", tasksRes.error);
+          }
+
+          // Profile from Supabase
+          if (profileRes.data) {
+            const resolvedProfile: UserProfile = {
+              name: profileRes.data.name || initialUserName,
+              email: currentUserEmailForFetch || profileRes.data.email || "",
+              title: profileRes.data.title || initialUserTitle,
+            };
+            setProfile(resolvedProfile);
+            try {
+              localStorage.setItem(scopedProfileKey, JSON.stringify(resolvedProfile));
+            } catch (e) {
+              console.warn("Error caching scoped profile", e);
+            }
+          } else if (profileRes.error) {
+            console.error("Error loading user profile from Supabase:", profileRes.error);
+          }
+
+          // Preferences from Supabase
+          if (prefRes.data) {
+            const resolvedPrefs: UserPreferences = {
+              theme: prefRes.data.theme || DEFAULT_PREFERENCES.theme,
+              timezone: prefRes.data.timezone || DEFAULT_PREFERENCES.timezone,
+              notifications: {
+                ...DEFAULT_PREFERENCES.notifications,
+                ...(prefRes.data.notifications || {}),
+              },
+            };
+            setPreferences(resolvedPrefs);
+            try {
+              localStorage.setItem(scopedPreferencesKey, JSON.stringify(resolvedPrefs));
+            } catch (e) {
+              console.warn("Error caching scoped preferences", e);
+            }
+          } else if (prefRes.error) {
+            console.error("Error loading user preferences from Supabase:", prefRes.error);
+          }
+        } catch (err) {
+          console.error("Failed to load Supabase user data:", err);
+        } finally {
+          if (seq === requestSeqRef.current) {
+            setIsDataLoading(false);
+            setIsProfileLoading(false);
+            setIsLoaded(true);
+          }
+        }
+      }
+
+      loadSupabaseUserData();
+    }
+  }, [user, isAuthLoading]);
+
+  // 2. Synchronize theme to document element class list & listen to system theme changes
   useEffect(() => {
     if (typeof window === "undefined") return;
     const root = document.documentElement;
-    const isDark =
-      preferences.theme === "dark" ||
-      (preferences.theme === "system" &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
-    if (isDark) {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
+    const applyTheme = () => {
+      const isDark =
+        preferences.theme === "dark" ||
+        (preferences.theme === "system" && mediaQuery.matches);
+
+      if (isDark) {
+        root.classList.add("dark");
+      } else {
+        root.classList.remove("dark");
+      }
+    };
+
+    applyTheme();
+
+    if (preferences.theme === "system") {
+      mediaQuery.addEventListener("change", applyTheme);
+      return () => {
+        mediaQuery.removeEventListener("change", applyTheme);
+      };
     }
   }, [preferences.theme]);
 
   // ── Profile Actions ──
 
-  const updateProfile = useCallback((updates: Partial<UserProfile>) => {
-    setProfile((prev) => {
-      const next = {
-        ...prev,
-        ...updates,
-        name: updates.name !== undefined ? updates.name.trim() : prev.name,
-        email: updates.email !== undefined ? updates.email.trim() : prev.email,
-        title: updates.title !== undefined ? updates.title.trim() : prev.title,
-      };
-      try {
-        localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn("Error saving profile", e);
+  const updateProfile = useCallback(
+    async (updates: Partial<UserProfile>) => {
+      const nextName = updates.name !== undefined ? updates.name.trim() : profile.name;
+      const nextTitle = updates.title !== undefined ? updates.title.trim() : profile.title;
+
+      if (user) {
+        const { data, error } = await apiUpdateUserProfile(user.id, {
+          name: nextName,
+          title: nextTitle,
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        const nextProfile: UserProfile = {
+          ...profile,
+          name: data?.name ?? nextName,
+          title: data?.title ?? nextTitle,
+          email: user.email ?? profile.email,
+        };
+        setProfile(nextProfile);
+
+        try {
+          const key = getScopedStorageKey(user.id, "profile");
+          localStorage.setItem(key, JSON.stringify(nextProfile));
+        } catch (e) {
+          console.warn("Error caching scoped profile", e);
+        }
+      } else {
+        setProfile((prev) => {
+          const next = {
+            ...prev,
+            ...updates,
+            name: nextName,
+            email: updates.email !== undefined ? updates.email.trim() : prev.email,
+            title: nextTitle,
+          };
+          try {
+            localStorage.setItem(LEGACY_STORAGE_KEYS.profile, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error saving guest profile", e);
+          }
+          return next;
+        });
       }
-      return next;
-    });
-  }, []);
+    },
+    [user, profile]
+  );
 
   // ── Preferences Actions ──
 
-  const updatePreferences = useCallback((updates: Partial<UserPreferences>) => {
-    setPreferences((prev) => {
-      const next = {
-        ...prev,
-        ...updates,
-        notifications: updates.notifications
-          ? { ...prev.notifications, ...updates.notifications }
-          : prev.notifications,
-      };
-      try {
-        localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn("Error saving preferences", e);
+  const updatePreferences = useCallback(
+    async (updates: Partial<UserPreferences>) => {
+      if (user) {
+        const { data, error } = await apiUpdateUserPreferences(user.id, updates);
+        if (error) {
+          throw error;
+        }
+
+        const nextPrefs: UserPreferences = {
+          ...preferences,
+          theme: data?.theme ?? (updates.theme || preferences.theme),
+          timezone: data?.timezone ?? (updates.timezone || preferences.timezone),
+          notifications: data?.notifications ?? (updates.notifications
+            ? { ...preferences.notifications, ...updates.notifications }
+            : preferences.notifications),
+        };
+        setPreferences(nextPrefs);
+
+        try {
+          const key = getScopedStorageKey(user.id, "preferences");
+          localStorage.setItem(key, JSON.stringify(nextPrefs));
+        } catch (e) {
+          console.warn("Error caching scoped preferences", e);
+        }
+      } else {
+        setPreferences((prev) => {
+          const next = {
+            ...prev,
+            ...updates,
+            notifications: updates.notifications
+              ? { ...prev.notifications, ...updates.notifications }
+              : prev.notifications,
+          };
+          try {
+            localStorage.setItem(LEGACY_STORAGE_KEYS.preferences, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error saving guest preferences", e);
+          }
+          return next;
+        });
       }
-      return next;
-    });
-  }, []);
+    },
+    [user, preferences]
+  );
 
   const setNotificationPreference = useCallback(
-    (category: keyof NotificationSettings, enabled: boolean) => {
-      setPreferences((prev) => {
-        const next = {
-          ...prev,
-          notifications: {
-            ...prev.notifications,
-            [category]: enabled,
-          },
-        };
-        try {
-          localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(next));
-        } catch (e) {
-          console.warn("Error saving notification preferences", e);
+    async (category: keyof NotificationSettings, enabled: boolean) => {
+      const nextNotifications: NotificationSettings = {
+        ...preferences.notifications,
+        [category]: enabled,
+      };
+
+      if (user) {
+        const { error } = await apiUpdateUserPreferences(user.id, {
+          notifications: nextNotifications,
+        });
+        if (error) {
+          throw error;
         }
-        return next;
-      });
+
+        const nextPrefs: UserPreferences = {
+          ...preferences,
+          notifications: nextNotifications,
+        };
+        setPreferences(nextPrefs);
+
+        try {
+          const key = getScopedStorageKey(user.id, "preferences");
+          localStorage.setItem(key, JSON.stringify(nextPrefs));
+        } catch (e) {
+          console.warn("Error caching scoped preferences", e);
+        }
+      } else {
+        setPreferences((prev) => {
+          const next = {
+            ...prev,
+            notifications: nextNotifications,
+          };
+          try {
+            localStorage.setItem(LEGACY_STORAGE_KEYS.preferences, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error saving notification preferences", e);
+          }
+          return next;
+        });
+      }
     },
-    []
+    [user, preferences]
   );
 
-  // ── Task Actions ──
+  // ── Task Actions (Supabase Cloud + Local Storage Fallback) ──
 
-  const addTask = useCallback((input: TaskInput): Task => {
-    const nowISO = new Date().toISOString();
-    const newTask: Task = {
-      id: generateId("task"),
-      user_id: DEFAULT_USER_ID,
-      title: input.title.trim(),
-      description: input.description?.trim() || undefined,
-      due_at: input.due_at || undefined,
-      priority: input.priority || "medium",
-      status: input.status || "todo",
-      course_schedule_id: input.course_schedule_id || undefined,
-      created_at: nowISO,
-      updated_at: nowISO,
-    };
+  const addTask = useCallback(
+    async (input: TaskInput): Promise<Task> => {
+      if (user) {
+        const { data, error } = await createUserTask(user.id, input);
+        if (error || !data) {
+          throw error || new Error("Gagal membuat tugas di Supabase.");
+        }
 
-    setTasks((prev) => {
-      const next = [newTask, ...prev];
-      try {
-        localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn("Error saving tasks", e);
+        setTasks((prev) => {
+          const next = [data, ...prev];
+          try {
+            const storageKey = getScopedStorageKey(user.id, "tasks");
+            localStorage.setItem(storageKey, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error caching tasks", e);
+          }
+          return next;
+        });
+
+        return data;
+      } else {
+        // Guest mode
+        const nowISO = new Date().toISOString();
+        const newTask: Task = {
+          id: generateId("task"),
+          user_id: DEFAULT_USER_ID,
+          title: input.title.trim(),
+          description: input.description?.trim() || undefined,
+          due_at: input.due_at || undefined,
+          priority: input.priority || "medium",
+          status: input.status || "todo",
+          course_schedule_id: input.course_schedule_id || undefined,
+          created_at: nowISO,
+          updated_at: nowISO,
+        };
+
+        setTasks((prev) => {
+          const next = [newTask, ...prev];
+          try {
+            localStorage.setItem(LEGACY_STORAGE_KEYS.tasks, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error saving tasks", e);
+          }
+          return next;
+        });
+
+        return newTask;
       }
-      return next;
-    });
-
-    return newTask;
-  }, []);
+    },
+    [user]
+  );
 
   const updateTask = useCallback(
-    (id: string, updates: Partial<Omit<Task, "id" | "user_id">>) => {
-      setTasks((prev) => {
-        const next = prev.map((t) =>
-          t.id === id
-            ? {
-                ...t,
-                ...updates,
-                title: updates.title !== undefined ? updates.title.trim() : t.title,
-                description:
-                  updates.description !== undefined
-                    ? updates.description.trim() || undefined
-                    : t.description,
-                updated_at: new Date().toISOString(),
-              }
-            : t
-        );
-        try {
-          localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(next));
-        } catch (e) {
-          console.warn("Error saving tasks", e);
+    async (id: string, updates: Partial<Omit<Task, "id" | "user_id">>): Promise<void> => {
+      if (user) {
+        let rollbackTasks: Task[] = [];
+        setTasks((prev) => {
+          rollbackTasks = prev;
+          return prev.map((t) =>
+            t.id === id
+              ? {
+                  ...t,
+                  ...updates,
+                  title: updates.title !== undefined ? updates.title.trim() : t.title,
+                  description:
+                    updates.description !== undefined
+                      ? updates.description.trim() || undefined
+                      : t.description,
+                  updated_at: new Date().toISOString(),
+                }
+              : t
+          );
+        });
+
+        const { data, error } = await updateUserTask(user.id, id, updates);
+        if (error) {
+          setTasks(rollbackTasks);
+          throw error;
         }
-        return next;
-      });
+
+        if (data) {
+          setTasks((prev) => {
+            const next = prev.map((t) => (t.id === id ? data : t));
+            try {
+              const storageKey = getScopedStorageKey(user.id, "tasks");
+              localStorage.setItem(storageKey, JSON.stringify(next));
+            } catch (e) {
+              console.warn("Error caching tasks", e);
+            }
+            return next;
+          });
+        }
+      } else {
+        // Guest mode
+        setTasks((prev) => {
+          const next = prev.map((t) =>
+            t.id === id
+              ? {
+                  ...t,
+                  ...updates,
+                  title: updates.title !== undefined ? updates.title.trim() : t.title,
+                  description:
+                    updates.description !== undefined
+                      ? updates.description.trim() || undefined
+                      : t.description,
+                  updated_at: new Date().toISOString(),
+                }
+              : t
+          );
+          try {
+            localStorage.setItem(LEGACY_STORAGE_KEYS.tasks, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error saving tasks", e);
+          }
+          return next;
+        });
+      }
     },
-    []
+    [user]
   );
 
-  const deleteTask = useCallback((id: string) => {
-    setTasks((prev) => {
-      const next = prev.filter((t) => t.id !== id);
-      try {
-        localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn("Error saving tasks", e);
-      }
-      return next;
-    });
-  }, []);
+  const deleteTask = useCallback(
+    async (id: string): Promise<void> => {
+      if (user) {
+        let rollbackTasks: Task[] = [];
+        setTasks((prev) => {
+          rollbackTasks = prev;
+          return prev.filter((t) => t.id !== id);
+        });
 
-  const toggleTaskStatus = useCallback((id: string) => {
-    setTasks((prev) => {
-      const next = prev.map((t) => {
-        if (t.id !== id) return t;
-        const newStatus: TaskStatus = t.status === "done" ? "todo" : "done";
-        return {
-          ...t,
-          status: newStatus,
-          updated_at: new Date().toISOString(),
-        };
-      });
-      try {
-        localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn("Error saving tasks", e);
+        const { error } = await deleteUserTask(user.id, id);
+        if (error) {
+          setTasks(rollbackTasks);
+          throw error;
+        }
+
+        try {
+          const storageKey = getScopedStorageKey(user.id, "tasks");
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify(rollbackTasks.filter((t) => t.id !== id))
+          );
+        } catch (e) {
+          console.warn("Error caching tasks", e);
+        }
+      } else {
+        // Guest mode
+        setTasks((prev) => {
+          const next = prev.filter((t) => t.id !== id);
+          try {
+            localStorage.setItem(LEGACY_STORAGE_KEYS.tasks, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error saving tasks", e);
+          }
+          return next;
+        });
       }
-      return next;
-    });
-  }, []);
+    },
+    [user]
+  );
+
+  const toggleTaskStatus = useCallback(
+    async (id: string): Promise<void> => {
+      const target = tasks.find((t) => t.id === id);
+      if (!target) return;
+      const nextStatus: TaskStatus = target.status === "done" ? "todo" : "done";
+
+      if (user) {
+        let rollbackTasks: Task[] = [];
+        setTasks((prev) => {
+          rollbackTasks = prev;
+          return prev.map((t) =>
+            t.id === id
+              ? {
+                  ...t,
+                  status: nextStatus,
+                  updated_at: new Date().toISOString(),
+                }
+              : t
+          );
+        });
+
+        const { error } = await updateUserTask(user.id, id, { status: nextStatus });
+        if (error) {
+          setTasks(rollbackTasks);
+          throw error;
+        }
+
+        try {
+          const storageKey = getScopedStorageKey(user.id, "tasks");
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify(
+              rollbackTasks.map((t) =>
+                t.id === id
+                  ? { ...t, status: nextStatus, updated_at: new Date().toISOString() }
+                  : t
+              )
+            )
+          );
+        } catch (e) {
+          console.warn("Error caching tasks", e);
+        }
+      } else {
+        // Guest mode
+        setTasks((prev) => {
+          const next = prev.map((t) => {
+            if (t.id !== id) return t;
+            return {
+              ...t,
+              status: nextStatus,
+              updated_at: new Date().toISOString(),
+            };
+          });
+          try {
+            localStorage.setItem(LEGACY_STORAGE_KEYS.tasks, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error saving tasks", e);
+          }
+          return next;
+        });
+      }
+    },
+    [user, tasks]
+  );
 
   // ── Note Actions ──
 
-  const addNote = useCallback((input: NoteInput): Note => {
-    const nowISO = new Date().toISOString();
-    const newNote: Note = {
-      id: generateId("note"),
-      user_id: DEFAULT_USER_ID,
-      title: input.title.trim(),
-      content: input.content.trim(),
-      category: input.category?.trim() || undefined,
-      tags: input.tags && input.tags.length > 0 ? input.tags : undefined,
-      is_favorite: Boolean(input.is_favorite),
-      created_at: nowISO,
-      updated_at: nowISO,
-    };
+  const addNote = useCallback(
+    (input: NoteInput): Note => {
+      const currentUserId = user?.id || DEFAULT_USER_ID;
+      const nowISO = new Date().toISOString();
+      const newNote: Note = {
+        id: generateId("note"),
+        user_id: currentUserId,
+        title: input.title.trim(),
+        content: input.content.trim(),
+        category: input.category?.trim() || undefined,
+        tags: input.tags && input.tags.length > 0 ? input.tags : undefined,
+        is_favorite: Boolean(input.is_favorite),
+        created_at: nowISO,
+        updated_at: nowISO,
+      };
 
-    setNotes((prev) => {
-      const next = [newNote, ...prev];
-      try {
-        localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn("Error saving notes", e);
-      }
-      return next;
-    });
+      setNotes((prev) => {
+        const next = [newNote, ...prev];
+        try {
+          const storageKey = getScopedStorageKey(user?.id, "notes");
+          localStorage.setItem(storageKey, JSON.stringify(next));
+        } catch (e) {
+          console.warn("Error saving notes", e);
+        }
+        return next;
+      });
 
-    return newNote;
-  }, []);
+      return newNote;
+    },
+    [user?.id]
+  );
 
   const updateNote = useCallback(
     (id: string, updates: Partial<Omit<Note, "id" | "user_id">>) => {
@@ -417,78 +905,92 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             : n
         );
         try {
-          localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(next));
+          const storageKey = getScopedStorageKey(user?.id, "notes");
+          localStorage.setItem(storageKey, JSON.stringify(next));
         } catch (e) {
           console.warn("Error saving notes", e);
         }
         return next;
       });
     },
-    []
+    [user?.id]
   );
 
-  const deleteNote = useCallback((id: string) => {
-    setNotes((prev) => {
-      const next = prev.filter((n) => n.id !== id);
-      try {
-        localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn("Error saving notes", e);
-      }
-      return next;
-    });
-  }, []);
+  const deleteNote = useCallback(
+    (id: string) => {
+      setNotes((prev) => {
+        const next = prev.filter((n) => n.id !== id);
+        try {
+          const storageKey = getScopedStorageKey(user?.id, "notes");
+          localStorage.setItem(storageKey, JSON.stringify(next));
+        } catch (e) {
+          console.warn("Error saving notes", e);
+        }
+        return next;
+      });
+    },
+    [user?.id]
+  );
 
-  const toggleNoteFavorite = useCallback((id: string) => {
-    setNotes((prev) => {
-      const next = prev.map((n) =>
-        n.id === id
-          ? {
-              ...n,
-              is_favorite: !n.is_favorite,
-              updated_at: new Date().toISOString(),
-            }
-          : n
-      );
-      try {
-        localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn("Error saving notes", e);
-      }
-      return next;
-    });
-  }, []);
+  const toggleNoteFavorite = useCallback(
+    (id: string) => {
+      setNotes((prev) => {
+        const next = prev.map((n) =>
+          n.id === id
+            ? {
+                ...n,
+                is_favorite: !n.is_favorite,
+                updated_at: new Date().toISOString(),
+              }
+            : n
+        );
+        try {
+          const storageKey = getScopedStorageKey(user?.id, "notes");
+          localStorage.setItem(storageKey, JSON.stringify(next));
+        } catch (e) {
+          console.warn("Error saving notes", e);
+        }
+        return next;
+      });
+    },
+    [user?.id]
+  );
 
   // ── Schedule Actions (Jadwal Kuliah) ──
 
-  const addSchedule = useCallback((input: ScheduleInput): CourseSchedule => {
-    const nowISO = new Date().toISOString();
-    const newSchedule: CourseSchedule = {
-      id: generateId("sched"),
-      user_id: DEFAULT_USER_ID,
-      course_name: input.course_name.trim(),
-      course_code: input.course_code?.trim() || undefined,
-      day_of_week: input.day_of_week,
-      start_time: input.start_time,
-      end_time: input.end_time,
-      location: input.location?.trim() || undefined,
-      recurrence_rule: input.recurrence_rule || "weekly",
-      created_at: nowISO,
-      updated_at: nowISO,
-    };
+  const addSchedule = useCallback(
+    (input: ScheduleInput): CourseSchedule => {
+      const currentUserId = user?.id || DEFAULT_USER_ID;
+      const nowISO = new Date().toISOString();
+      const newSchedule: CourseSchedule = {
+        id: generateId("sched"),
+        user_id: currentUserId,
+        course_name: input.course_name.trim(),
+        course_code: input.course_code?.trim() || undefined,
+        day_of_week: input.day_of_week,
+        start_time: input.start_time,
+        end_time: input.end_time,
+        location: input.location?.trim() || undefined,
+        recurrence_rule: input.recurrence_rule || "weekly",
+        created_at: nowISO,
+        updated_at: nowISO,
+      };
 
-    setSchedules((prev) => {
-      const next = [...prev, newSchedule];
-      try {
-        localStorage.setItem(SCHEDULES_STORAGE_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn("Error saving schedules", e);
-      }
-      return next;
-    });
+      setSchedules((prev) => {
+        const next = [...prev, newSchedule];
+        try {
+          const storageKey = getScopedStorageKey(user?.id, "schedules");
+          localStorage.setItem(storageKey, JSON.stringify(next));
+        } catch (e) {
+          console.warn("Error saving schedules", e);
+        }
+        return next;
+      });
 
-    return newSchedule;
-  }, []);
+      return newSchedule;
+    },
+    [user?.id]
+  );
 
   const updateSchedule = useCallback(
     (id: string, updates: Partial<Omit<CourseSchedule, "id" | "user_id">>) => {
@@ -511,57 +1013,67 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             : s
         );
         try {
-          localStorage.setItem(SCHEDULES_STORAGE_KEY, JSON.stringify(next));
+          const storageKey = getScopedStorageKey(user?.id, "schedules");
+          localStorage.setItem(storageKey, JSON.stringify(next));
         } catch (e) {
           console.warn("Error saving schedules", e);
         }
         return next;
       });
     },
-    []
+    [user?.id]
   );
 
-  const deleteSchedule = useCallback((id: string) => {
-    setSchedules((prev) => {
-      const next = prev.filter((s) => s.id !== id);
-      try {
-        localStorage.setItem(SCHEDULES_STORAGE_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn("Error saving schedules", e);
-      }
-      return next;
-    });
-  }, []);
+  const deleteSchedule = useCallback(
+    (id: string) => {
+      setSchedules((prev) => {
+        const next = prev.filter((s) => s.id !== id);
+        try {
+          const storageKey = getScopedStorageKey(user?.id, "schedules");
+          localStorage.setItem(storageKey, JSON.stringify(next));
+        } catch (e) {
+          console.warn("Error saving schedules", e);
+        }
+        return next;
+      });
+    },
+    [user?.id]
+  );
 
   // ── Agenda Actions ──
 
-  const addAgendaEvent = useCallback((input: AgendaInput): AgendaEvent => {
-    const nowISO = new Date().toISOString();
-    const newEvent: AgendaEvent = {
-      id: generateId("agenda"),
-      user_id: DEFAULT_USER_ID,
-      title: input.title.trim(),
-      description: input.description?.trim() || undefined,
-      start_at: input.start_at,
-      end_at: input.end_at || undefined,
-      location: input.location?.trim() || undefined,
-      reminder_minutes: input.reminder_minutes,
-      created_at: nowISO,
-      updated_at: nowISO,
-    };
+  const addAgendaEvent = useCallback(
+    (input: AgendaInput): AgendaEvent => {
+      const currentUserId = user?.id || DEFAULT_USER_ID;
+      const nowISO = new Date().toISOString();
+      const newEvent: AgendaEvent = {
+        id: generateId("agenda"),
+        user_id: currentUserId,
+        title: input.title.trim(),
+        description: input.description?.trim() || undefined,
+        start_at: input.start_at,
+        end_at: input.end_at || undefined,
+        location: input.location?.trim() || undefined,
+        reminder_minutes: input.reminder_minutes,
+        created_at: nowISO,
+        updated_at: nowISO,
+      };
 
-    setAgendaEvents((prev) => {
-      const next = [newEvent, ...prev];
-      try {
-        localStorage.setItem(AGENDA_STORAGE_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn("Error saving agenda events", e);
-      }
-      return next;
-    });
+      setAgendaEvents((prev) => {
+        const next = [newEvent, ...prev];
+        try {
+          const storageKey = getScopedStorageKey(user?.id, "agenda");
+          localStorage.setItem(storageKey, JSON.stringify(next));
+        } catch (e) {
+          console.warn("Error saving agenda events", e);
+        }
+        return next;
+      });
 
-    return newEvent;
-  }, []);
+      return newEvent;
+    },
+    [user?.id]
+  );
 
   const updateAgendaEvent = useCallback(
     (id: string, updates: Partial<Omit<AgendaEvent, "id" | "user_id">>) => {
@@ -583,27 +1095,32 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             : a
         );
         try {
-          localStorage.setItem(AGENDA_STORAGE_KEY, JSON.stringify(next));
+          const storageKey = getScopedStorageKey(user?.id, "agenda");
+          localStorage.setItem(storageKey, JSON.stringify(next));
         } catch (e) {
           console.warn("Error saving agenda events", e);
         }
         return next;
       });
     },
-    []
+    [user?.id]
   );
 
-  const deleteAgendaEvent = useCallback((id: string) => {
-    setAgendaEvents((prev) => {
-      const next = prev.filter((a) => a.id !== id);
-      try {
-        localStorage.setItem(AGENDA_STORAGE_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn("Error saving agenda events", e);
-      }
-      return next;
-    });
-  }, []);
+  const deleteAgendaEvent = useCallback(
+    (id: string) => {
+      setAgendaEvents((prev) => {
+        const next = prev.filter((a) => a.id !== id);
+        try {
+          const storageKey = getScopedStorageKey(user?.id, "agenda");
+          localStorage.setItem(storageKey, JSON.stringify(next));
+        } catch (e) {
+          console.warn("Error saving agenda events", e);
+        }
+        return next;
+      });
+    },
+    [user?.id]
+  );
 
   // ── Data Management (Export & Import) ──
 
@@ -623,45 +1140,112 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     };
   }, [profile, preferences, tasks, notes, schedules, agendaEvents]);
 
-  const importAllData = useCallback((imported: ValidatedNoctisExport) => {
-    if (imported.data.tasks) {
-      setTasks(imported.data.tasks);
-      localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(imported.data.tasks));
-    }
-    if (imported.data.notes) {
-      setNotes(imported.data.notes);
-      localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(imported.data.notes));
-    }
-    if (imported.data.schedules) {
-      setSchedules(imported.data.schedules);
-      localStorage.setItem(SCHEDULES_STORAGE_KEY, JSON.stringify(imported.data.schedules));
-    }
-    if (imported.data.agendaEvents) {
-      setAgendaEvents(imported.data.agendaEvents);
-      localStorage.setItem(AGENDA_STORAGE_KEY, JSON.stringify(imported.data.agendaEvents));
-    }
-    if (imported.profile) {
-      const newProfile: UserProfile = {
-        name: imported.profile.name || DEFAULT_PROFILE.name,
-        email: imported.profile.email || DEFAULT_PROFILE.email,
-        title: imported.profile.title || DEFAULT_PROFILE.title,
-      };
-      setProfile(newProfile);
-      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(newProfile));
-    }
-    if (imported.preferences) {
-      const newPrefs: UserPreferences = {
-        theme: imported.preferences.theme || DEFAULT_PREFERENCES.theme,
-        timezone: imported.preferences.timezone || DEFAULT_PREFERENCES.timezone,
-        notifications: {
-          ...DEFAULT_PREFERENCES.notifications,
-          ...(imported.preferences.notifications || {}),
-        },
-      };
-      setPreferences(newPrefs);
-      localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(newPrefs));
-    }
-  }, []);
+  const importAllData = useCallback(
+    (imported: ValidatedNoctisExport) => {
+      const currentUserId = user?.id;
+
+      if (imported.data.tasks) {
+        if (user) {
+          // Re-map tasks with active user's UUID
+          const sanitizedTasks = imported.data.tasks.map((t) => ({
+            ...t,
+            user_id: user.id,
+          }));
+          setTasks(sanitizedTasks);
+          const key = getScopedStorageKey(user.id, "tasks");
+          localStorage.setItem(key, JSON.stringify(sanitizedTasks));
+
+          // Sync each imported task to Supabase
+          for (const t of sanitizedTasks) {
+            createUserTask(user.id, {
+              title: t.title,
+              description: t.description,
+              due_at: t.due_at,
+              priority: t.priority,
+              status: t.status,
+              course_schedule_id: t.course_schedule_id,
+            }).catch((err) =>
+              console.error("Error importing task to Supabase:", err)
+            );
+          }
+        } else {
+          setTasks(imported.data.tasks);
+          localStorage.setItem(LEGACY_STORAGE_KEYS.tasks, JSON.stringify(imported.data.tasks));
+        }
+      }
+
+      if (imported.data.notes) {
+        setNotes(imported.data.notes);
+        const key = getScopedStorageKey(currentUserId, "notes");
+        localStorage.setItem(key, JSON.stringify(imported.data.notes));
+      }
+      if (imported.data.schedules) {
+        setSchedules(imported.data.schedules);
+        const key = getScopedStorageKey(currentUserId, "schedules");
+        localStorage.setItem(key, JSON.stringify(imported.data.schedules));
+      }
+      if (imported.data.agendaEvents) {
+        setAgendaEvents(imported.data.agendaEvents);
+        const key = getScopedStorageKey(currentUserId, "agenda");
+        localStorage.setItem(key, JSON.stringify(imported.data.agendaEvents));
+      }
+      if (imported.profile) {
+        const newProfile: UserProfile = {
+          name:
+            imported.profile.name ||
+            (user
+              ? user.user_metadata?.name || user.email?.split("@")[0] || "User"
+              : DEFAULT_GUEST_PROFILE.name),
+          email: user
+            ? user.email || ""
+            : imported.profile.email || DEFAULT_GUEST_PROFILE.email,
+          title: imported.profile.title || DEFAULT_GUEST_PROFILE.title,
+        };
+        setProfile(newProfile);
+
+        if (user) {
+          apiUpdateUserProfile(user.id, {
+            name: newProfile.name,
+            title: newProfile.title,
+          }).catch((err) =>
+            console.error("Error importing profile to Supabase:", err)
+          );
+          const key = getScopedStorageKey(user.id, "profile");
+          localStorage.setItem(key, JSON.stringify(newProfile));
+        } else {
+          localStorage.setItem(
+            LEGACY_STORAGE_KEYS.profile,
+            JSON.stringify(newProfile)
+          );
+        }
+      }
+      if (imported.preferences) {
+        const newPrefs: UserPreferences = {
+          theme: imported.preferences.theme || DEFAULT_PREFERENCES.theme,
+          timezone: imported.preferences.timezone || DEFAULT_PREFERENCES.timezone,
+          notifications: {
+            ...DEFAULT_PREFERENCES.notifications,
+            ...(imported.preferences.notifications || {}),
+          },
+        };
+        setPreferences(newPrefs);
+
+        if (user) {
+          apiUpdateUserPreferences(user.id, newPrefs).catch((err) =>
+            console.error("Error importing preferences to Supabase:", err)
+          );
+          const key = getScopedStorageKey(user.id, "preferences");
+          localStorage.setItem(key, JSON.stringify(newPrefs));
+        } else {
+          localStorage.setItem(
+            LEGACY_STORAGE_KEYS.preferences,
+            JSON.stringify(newPrefs)
+          );
+        }
+      }
+    },
+    [user]
+  );
 
   const value = useMemo(
     () => ({
@@ -697,6 +1281,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       exportAllData,
       importAllData,
 
+      isAuthLoading,
+      isProfileLoading,
+      isDataLoading,
       isLoaded,
     }),
     [
@@ -725,6 +1312,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setNotificationPreference,
       exportAllData,
       importAllData,
+      isAuthLoading,
+      isProfileLoading,
+      isDataLoading,
       isLoaded,
     ]
   );
