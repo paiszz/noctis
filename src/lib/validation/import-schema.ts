@@ -43,6 +43,8 @@ export const scheduleImportSchema = z.object({
   end_time: z.string().min(3),
   location: z.string().optional(),
   recurrence_rule: z.string().optional(),
+  start_date: z.string().optional(),
+  end_date: z.string().optional(),
   created_at: z.string().optional().default(() => new Date().toISOString()),
   updated_at: z.string().optional().default(() => new Date().toISOString()),
 });

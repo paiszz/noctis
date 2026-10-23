@@ -27,6 +27,7 @@ export function ScheduleFormModal({
 }: ScheduleFormModalProps) {
   const { addSchedule, updateSchedule } = useData();
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [courseName, setCourseName] = useState("");
   const [courseCode, setCourseCode] = useState("");
   const [dayOfWeek, setDayOfWeek] = useState<DayOfWeek>(defaultDay);
@@ -57,7 +58,7 @@ export function ScheduleFormModal({
     setErrors({});
   }, [scheduleToEdit, isOpen, defaultDay]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const newErrors: { courseName?: string; time?: string } = {};
@@ -77,29 +78,39 @@ export function ScheduleFormModal({
       return;
     }
 
-    if (scheduleToEdit) {
-      updateSchedule(scheduleToEdit.id, {
-        course_name: courseName,
-        course_code: courseCode || undefined,
-        day_of_week: dayOfWeek,
-        start_time: startTime,
-        end_time: endTime,
-        location: location || undefined,
-      });
-      toast.success("Jadwal kuliah berhasil diperbarui");
-    } else {
-      addSchedule({
-        course_name: courseName,
-        course_code: courseCode || undefined,
-        day_of_week: dayOfWeek,
-        start_time: startTime,
-        end_time: endTime,
-        location: location || undefined,
-      });
-      toast.success("Jadwal kuliah baru berhasil ditambahkan");
+    try {
+      setIsSubmitting(true);
+      if (scheduleToEdit) {
+        await updateSchedule(scheduleToEdit.id, {
+          course_name: courseName,
+          course_code: courseCode || undefined,
+          day_of_week: dayOfWeek,
+          start_time: startTime,
+          end_time: endTime,
+          location: location || undefined,
+        });
+        toast.success("Jadwal kuliah berhasil diperbarui");
+      } else {
+        await addSchedule({
+          course_name: courseName,
+          course_code: courseCode || undefined,
+          day_of_week: dayOfWeek,
+          start_time: startTime,
+          end_time: endTime,
+          location: location || undefined,
+        });
+        toast.success("Jadwal kuliah baru berhasil ditambahkan");
+      }
+      onClose();
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Gagal menyimpan jadwal kuliah. Silakan periksa koneksi internet.";
+      toast.error(msg);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    onClose();
   };
 
   return (
@@ -273,12 +284,17 @@ export function ScheduleFormModal({
               type="button"
               variant="ghost"
               size="sm"
+              disabled={isSubmitting}
               onClick={onClose}
             >
               Batal
             </Button>
-            <Button type="submit" size="sm">
-              {scheduleToEdit ? "Simpan Perubahan" : "Tambah Jadwal"}
+            <Button type="submit" size="sm" disabled={isSubmitting}>
+              {isSubmitting
+                ? "Menyimpan..."
+                : scheduleToEdit
+                ? "Simpan Perubahan"
+                : "Tambah Jadwal"}
             </Button>
           </div>
         </div>

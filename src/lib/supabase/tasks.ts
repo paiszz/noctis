@@ -86,8 +86,9 @@ export async function createUserTask(
   try {
     const nowISO = new Date().toISOString();
     // Catatan arsitektur: course_schedule_id di database memiliki foreign key ke public.schedules(user_id, id).
-    // Karena tabel schedules belum diintegrasikan ke Supabase (masih di localStorage), nilai yang bukan UUID
-    // valid atau belum ada di database harus diset null ke Supabase agar tidak melanggar foreign key constraint.
+    // Jadwal di Supabase menggunakan UUID v4. Jika course_schedule_id adalah UUID valid, relasi tersimpan di Supabase.
+    // Jika nilai bukan UUID (misalnya ID lokal peninggalan "sched-xxx"), diset null ke Supabase untuk mencegah
+    // pelanggaran foreign key constraint, sambil tetap mempertahankan relasi di client state.
     const validScheduleId = isValidUUID(input.course_schedule_id) ? input.course_schedule_id : null;
 
     const payload = {

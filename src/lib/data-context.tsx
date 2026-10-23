@@ -42,6 +42,12 @@ import {
   updateUserTask,
   deleteUserTask,
 } from "@/lib/supabase/tasks";
+import {
+  getUserSchedules,
+  createUserSchedule,
+  updateUserSchedule,
+  deleteUserSchedule,
+} from "@/lib/supabase/schedules";
 
 export const LEGACY_STORAGE_KEYS = {
   tasks: "noctis_storage_tasks_v1",
@@ -126,6 +132,8 @@ export interface ScheduleInput {
   end_time: string; // "HH:mm"
   location?: string;
   recurrence_rule?: string;
+  start_date?: string;
+  end_date?: string;
 }
 
 export interface AgendaInput {
@@ -154,9 +162,9 @@ interface DataContextType {
 
   // Schedules (Jadwal Kuliah)
   schedules: CourseSchedule[];
-  addSchedule: (input: ScheduleInput) => CourseSchedule;
-  updateSchedule: (id: string, updates: Partial<Omit<CourseSchedule, "id" | "user_id">>) => void;
-  deleteSchedule: (id: string) => void;
+  addSchedule: (input: ScheduleInput) => Promise<CourseSchedule>;
+  updateSchedule: (id: string, updates: Partial<Omit<CourseSchedule, "id" | "user_id">>) => Promise<void>;
+  deleteSchedule: (id: string) => Promise<void>;
 
   // Agenda Events
   agendaEvents: AgendaEvent[];
@@ -205,7 +213,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const prevUserIdRef = useRef<string | null | undefined>(undefined);
 
   // 1. Unified lifecycle effect: waits for authentication status, isolates account states,
-  //    and safely synchronizes Tasks, Profile, and Preferences from Supabase.
+  //    and safely synchronizes Tasks, Schedules, Profile, and Preferences from Supabase.
   useEffect(() => {
     // If Supabase authentication is still verifying the session, wait before touching data.
     if (isAuthLoading) {
@@ -223,7 +231,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setIsLoaded(false);
 
     // If account switched or user logged out, immediately purge in-memory state
-    // so previous user's tasks/notes never display for even a single frame
+    // so previous user's tasks/schedules never display for even a single frame
     if (isUserSwitched) {
       setTasks([]);
       setNotes([]);
@@ -319,7 +327,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     } else {
       // ── AUTHENTICATED USER MODE ──
       // Feature data is isolated using user-scoped storage keys.
-      // Tasks are fetched and synchronized directly with Supabase.
+      // Tasks and Schedules are fetched and synchronized directly with Supabase.
       const scopedTasksKey = getScopedStorageKey(user.id, "tasks");
       const scopedNotesKey = getScopedStorageKey(user.id, "notes");
       const scopedSchedulesKey = getScopedStorageKey(user.id, "schedules");
@@ -327,18 +335,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const scopedProfileKey = getScopedStorageKey(user.id, "profile");
       const scopedPreferencesKey = getScopedStorageKey(user.id, "preferences");
 
-      // 1. Fast-path: read scoped local cache for immediate recovery
+      // 1. Fast-path: read scoped local cache for immediate UI responsiveness
       try {
         const storedTasks = localStorage.getItem(scopedTasksKey);
         if (storedTasks) {
           setTasks(JSON.parse(storedTasks));
         }
 
+        const storedSchedules = localStorage.getItem(scopedSchedulesKey);
+        if (storedSchedules) {
+          setSchedules(JSON.parse(storedSchedules));
+        }
+
         const storedNotes = localStorage.getItem(scopedNotesKey);
         setNotes(storedNotes ? JSON.parse(storedNotes) : []);
-
-        const storedSchedules = localStorage.getItem(scopedSchedulesKey);
-        setSchedules(storedSchedules ? JSON.parse(storedSchedules) : []);
 
         const storedAgenda = localStorage.getItem(scopedAgendaKey);
         setAgendaEvents(storedAgenda ? JSON.parse(storedAgenda) : []);
@@ -366,7 +376,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         console.warn("Noctis: Could not read scoped cache from localStorage", err);
       }
 
-      // 2. Fetch Tasks, Profile, and Preferences concurrently from Supabase
+      // 2. Fetch Tasks, Schedules, Profile, and Preferences concurrently from Supabase
       const initialUserName =
         user.user_metadata?.name || user.email?.split("@")[0] || "User";
       const initialUserTitle =
@@ -376,7 +386,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       async function loadSupabaseUserData() {
         try {
-          const [profileRes, prefRes, tasksRes] = await Promise.all([
+          const [profileRes, prefRes, tasksRes, schedulesRes] = await Promise.all([
             getUserProfile(currentUserIdForFetch, {
               name: initialUserName,
               email: currentUserEmailForFetch || undefined,
@@ -384,6 +394,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             }),
             getUserPreferences(currentUserIdForFetch),
             getUserTasks(currentUserIdForFetch),
+            getUserSchedules(currentUserIdForFetch),
           ]);
 
           // Discard results if user switched or another load was initiated
@@ -399,6 +410,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             }
           } else if (tasksRes.error) {
             console.error("Error loading user tasks from Supabase:", tasksRes.error);
+          }
+
+          // Schedules from Supabase
+          if (schedulesRes.data) {
+            setSchedules(schedulesRes.data);
+            try {
+              localStorage.setItem(scopedSchedulesKey, JSON.stringify(schedulesRes.data));
+            } catch (e) {
+              console.warn("Error caching scoped schedules", e);
+            }
+          } else if (schedulesRes.error) {
+            console.error("Error loading user schedules from Supabase:", schedulesRes.error);
           }
 
           // Profile from Supabase
@@ -956,88 +979,179 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [user?.id]
   );
 
-  // ── Schedule Actions (Jadwal Kuliah) ──
+  // ── Schedule Actions (Supabase Cloud + Local Storage Fallback) ──
 
   const addSchedule = useCallback(
-    (input: ScheduleInput): CourseSchedule => {
-      const currentUserId = user?.id || DEFAULT_USER_ID;
-      const nowISO = new Date().toISOString();
-      const newSchedule: CourseSchedule = {
-        id: generateId("sched"),
-        user_id: currentUserId,
-        course_name: input.course_name.trim(),
-        course_code: input.course_code?.trim() || undefined,
-        day_of_week: input.day_of_week,
-        start_time: input.start_time,
-        end_time: input.end_time,
-        location: input.location?.trim() || undefined,
-        recurrence_rule: input.recurrence_rule || "weekly",
-        created_at: nowISO,
-        updated_at: nowISO,
-      };
-
-      setSchedules((prev) => {
-        const next = [...prev, newSchedule];
-        try {
-          const storageKey = getScopedStorageKey(user?.id, "schedules");
-          localStorage.setItem(storageKey, JSON.stringify(next));
-        } catch (e) {
-          console.warn("Error saving schedules", e);
+    async (input: ScheduleInput): Promise<CourseSchedule> => {
+      if (user) {
+        const { data, error } = await createUserSchedule(user.id, input);
+        if (error || !data) {
+          throw error || new Error("Gagal membuat jadwal kuliah di Supabase.");
         }
-        return next;
-      });
 
-      return newSchedule;
+        setSchedules((prev) => {
+          const next = [...prev, data];
+          try {
+            const storageKey = getScopedStorageKey(user.id, "schedules");
+            localStorage.setItem(storageKey, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error caching schedules", e);
+          }
+          return next;
+        });
+
+        return data;
+      } else {
+        // Guest mode
+        const nowISO = new Date().toISOString();
+        const newSchedule: CourseSchedule = {
+          id: generateId("sched"),
+          user_id: DEFAULT_USER_ID,
+          course_name: input.course_name.trim(),
+          course_code: input.course_code?.trim() || undefined,
+          day_of_week: input.day_of_week,
+          start_time: input.start_time,
+          end_time: input.end_time,
+          location: input.location?.trim() || undefined,
+          recurrence_rule: input.recurrence_rule || "weekly",
+          start_date: input.start_date || undefined,
+          end_date: input.end_date || undefined,
+          created_at: nowISO,
+          updated_at: nowISO,
+        };
+
+        setSchedules((prev) => {
+          const next = [...prev, newSchedule];
+          try {
+            localStorage.setItem(LEGACY_STORAGE_KEYS.schedules, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error saving schedules", e);
+          }
+          return next;
+        });
+
+        return newSchedule;
+      }
     },
-    [user?.id]
+    [user]
   );
 
   const updateSchedule = useCallback(
-    (id: string, updates: Partial<Omit<CourseSchedule, "id" | "user_id">>) => {
-      setSchedules((prev) => {
-        const next = prev.map((s) =>
-          s.id === id
-            ? {
-                ...s,
-                ...updates,
-                course_name:
-                  updates.course_name !== undefined ? updates.course_name.trim() : s.course_name,
-                course_code:
-                  updates.course_code !== undefined
-                    ? updates.course_code.trim() || undefined
-                    : s.course_code,
-                location:
-                  updates.location !== undefined ? updates.location.trim() || undefined : s.location,
-                updated_at: new Date().toISOString(),
-              }
-            : s
-        );
-        try {
-          const storageKey = getScopedStorageKey(user?.id, "schedules");
-          localStorage.setItem(storageKey, JSON.stringify(next));
-        } catch (e) {
-          console.warn("Error saving schedules", e);
+    async (
+      id: string,
+      updates: Partial<Omit<CourseSchedule, "id" | "user_id">>
+    ): Promise<void> => {
+      if (user) {
+        let rollbackSchedules: CourseSchedule[] = [];
+        setSchedules((prev) => {
+          rollbackSchedules = prev;
+          return prev.map((s) =>
+            s.id === id
+              ? {
+                  ...s,
+                  ...updates,
+                  course_name:
+                    updates.course_name !== undefined ? updates.course_name.trim() : s.course_name,
+                  course_code:
+                    updates.course_code !== undefined
+                      ? updates.course_code.trim() || undefined
+                      : s.course_code,
+                  location:
+                    updates.location !== undefined ? updates.location.trim() || undefined : s.location,
+                  updated_at: new Date().toISOString(),
+                }
+              : s
+          );
+        });
+
+        const { data, error } = await updateUserSchedule(user.id, id, updates);
+        if (error) {
+          setSchedules(rollbackSchedules);
+          throw error;
         }
-        return next;
-      });
+
+        if (data) {
+          setSchedules((prev) => {
+            const next = prev.map((s) => (s.id === id ? data : s));
+            try {
+              const storageKey = getScopedStorageKey(user.id, "schedules");
+              localStorage.setItem(storageKey, JSON.stringify(next));
+            } catch (e) {
+              console.warn("Error caching schedules", e);
+            }
+            return next;
+          });
+        }
+      } else {
+        // Guest mode
+        setSchedules((prev) => {
+          const next = prev.map((s) =>
+            s.id === id
+              ? {
+                  ...s,
+                  ...updates,
+                  course_name:
+                    updates.course_name !== undefined ? updates.course_name.trim() : s.course_name,
+                  course_code:
+                    updates.course_code !== undefined
+                      ? updates.course_code.trim() || undefined
+                      : s.course_code,
+                  location:
+                    updates.location !== undefined ? updates.location.trim() || undefined : s.location,
+                  updated_at: new Date().toISOString(),
+                }
+              : s
+          );
+          try {
+            localStorage.setItem(LEGACY_STORAGE_KEYS.schedules, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error saving schedules", e);
+          }
+          return next;
+        });
+      }
     },
-    [user?.id]
+    [user]
   );
 
   const deleteSchedule = useCallback(
-    (id: string) => {
-      setSchedules((prev) => {
-        const next = prev.filter((s) => s.id !== id);
-        try {
-          const storageKey = getScopedStorageKey(user?.id, "schedules");
-          localStorage.setItem(storageKey, JSON.stringify(next));
-        } catch (e) {
-          console.warn("Error saving schedules", e);
+    async (id: string): Promise<void> => {
+      if (user) {
+        let rollbackSchedules: CourseSchedule[] = [];
+        setSchedules((prev) => {
+          rollbackSchedules = prev;
+          return prev.filter((s) => s.id !== id);
+        });
+
+        const { error } = await deleteUserSchedule(user.id, id);
+        if (error) {
+          setSchedules(rollbackSchedules);
+          throw error;
         }
-        return next;
-      });
+
+        try {
+          const storageKey = getScopedStorageKey(user.id, "schedules");
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify(rollbackSchedules.filter((s) => s.id !== id))
+          );
+        } catch (e) {
+          console.warn("Error caching schedules", e);
+        }
+      } else {
+        // Guest mode
+        setSchedules((prev) => {
+          const next = prev.filter((s) => s.id !== id);
+          try {
+            localStorage.setItem(LEGACY_STORAGE_KEYS.schedules, JSON.stringify(next));
+          } catch (e) {
+            console.warn("Error saving schedules", e);
+          }
+          return next;
+        });
+      }
     },
-    [user?.id]
+    [user]
   );
 
   // ── Agenda Actions ──
@@ -1174,15 +1288,46 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
+      if (imported.data.schedules) {
+        if (user) {
+          // Re-map schedules with active user's UUID
+          const sanitizedSchedules = imported.data.schedules.map((s) => ({
+            ...s,
+            user_id: user.id,
+          }));
+          setSchedules(sanitizedSchedules);
+          const key = getScopedStorageKey(user.id, "schedules");
+          localStorage.setItem(key, JSON.stringify(sanitizedSchedules));
+
+          // Sync each imported schedule to Supabase
+          for (const s of sanitizedSchedules) {
+            createUserSchedule(user.id, {
+              course_name: s.course_name,
+              course_code: s.course_code,
+              day_of_week: s.day_of_week,
+              start_time: s.start_time,
+              end_time: s.end_time,
+              location: s.location,
+              recurrence_rule: s.recurrence_rule,
+              start_date: s.start_date,
+              end_date: s.end_date,
+            }).catch((err) =>
+              console.error("Error importing schedule to Supabase:", err)
+            );
+          }
+        } else {
+          setSchedules(imported.data.schedules);
+          localStorage.setItem(
+            LEGACY_STORAGE_KEYS.schedules,
+            JSON.stringify(imported.data.schedules)
+          );
+        }
+      }
+
       if (imported.data.notes) {
         setNotes(imported.data.notes);
         const key = getScopedStorageKey(currentUserId, "notes");
         localStorage.setItem(key, JSON.stringify(imported.data.notes));
-      }
-      if (imported.data.schedules) {
-        setSchedules(imported.data.schedules);
-        const key = getScopedStorageKey(currentUserId, "schedules");
-        localStorage.setItem(key, JSON.stringify(imported.data.schedules));
       }
       if (imported.data.agendaEvents) {
         setAgendaEvents(imported.data.agendaEvents);

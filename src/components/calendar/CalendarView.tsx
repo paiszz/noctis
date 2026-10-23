@@ -33,7 +33,7 @@ function parseTimeToMinutes(timeStr: string): number {
 }
 
 export function CalendarView() {
-  const { schedules, deleteSchedule } = useData();
+  const { schedules, deleteSchedule, isLoaded } = useData();
 
   const [currentDate, setCurrentDate] = useState<Date>(() => toJakartaDate(new Date()));
   const [today, setToday] = useState<Date>(() => toJakartaDate(new Date()));
@@ -43,6 +43,7 @@ export function CalendarView() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<CourseSchedule | null>(null);
   const [scheduleToDelete, setScheduleToDelete] = useState<CourseSchedule | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     setToday(toJakartaDate(new Date()));
@@ -71,11 +72,21 @@ export function CalendarView() {
     setIsFormOpen(true);
   };
 
-  const confirmDelete = () => {
-    if (scheduleToDelete) {
-      deleteSchedule(scheduleToDelete.id);
+  const confirmDelete = async () => {
+    if (!scheduleToDelete) return;
+    try {
+      setIsDeleting(true);
+      await deleteSchedule(scheduleToDelete.id);
       toast.success(`Jadwal "${scheduleToDelete.course_name}" telah dihapus.`);
       setScheduleToDelete(null);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Gagal menghapus jadwal kuliah. Silakan periksa koneksi internet.";
+      toast.error(msg);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -85,6 +96,21 @@ export function CalendarView() {
       .filter((s) => s.day_of_week === day)
       .sort((a, b) => a.start_time.localeCompare(b.start_time));
   };
+
+  if (!isLoaded) {
+    return (
+      <div className="max-w-6xl mx-auto space-y-4 animate-pulse">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="h-8 w-60 bg-muted/20 rounded-lg" />
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-24 bg-muted/20 rounded-xl" />
+            <div className="h-9 w-32 bg-muted/20 rounded-xl" />
+          </div>
+        </div>
+        <Card padding="md" className="h-[480px] bg-surface/60" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
@@ -404,6 +430,7 @@ export function CalendarView() {
             <Button
               variant="ghost"
               size="sm"
+              disabled={isDeleting}
               onClick={() => setScheduleToDelete(null)}
             >
               Batal
@@ -411,9 +438,10 @@ export function CalendarView() {
             <Button
               variant="danger"
               size="sm"
+              disabled={isDeleting}
               onClick={confirmDelete}
             >
-              Hapus Jadwal
+              {isDeleting ? "Menghapus..." : "Hapus Jadwal"}
             </Button>
           </div>
         </div>
