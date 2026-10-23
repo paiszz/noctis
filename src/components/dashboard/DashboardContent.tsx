@@ -26,6 +26,7 @@ import {
 import Link from "next/link";
 import { Card, Badge, Button, priorityVariant } from "@/components/ui";
 import { useData } from "@/lib/data-context";
+import { useAuth } from "@/lib/auth-context";
 import { toJakartaDate } from "@/lib/date";
 import { isOverdue, isUpcomingAgenda, isPastAgenda, PRIORITY_LABELS } from "@/types";
 import type { DayOfWeek, CourseSchedule, Task, AgendaEvent, Note } from "@/types";
@@ -34,6 +35,7 @@ import { toast } from "sonner";
 
 export function DashboardContent() {
   const [now, setNow] = useState<Date>(() => toJakartaDate(new Date()));
+  const { user, isLoggingOut } = useAuth();
   const {
     tasks,
     toggleTaskStatus,
@@ -47,6 +49,9 @@ export function DashboardContent() {
     isProfileLoading,
     isDataLoading,
   } = useData();
+
+  const isProfilePending = !isLoaded || isProfileLoading || isLoggingOut;
+  const displayName = profile?.name ? `${profile.name}.` : user ? "Pengguna Noctis." : "Tamu.";
 
 
 
@@ -276,10 +281,10 @@ export function DashboardContent() {
         <div>
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground flex items-center flex-wrap gap-2">
             <span>{greeting},</span>
-            {isProfileLoading ? (
+            {isProfilePending ? (
               <span className="inline-block w-40 h-8 sm:h-9 bg-muted/25 animate-pulse rounded-lg" />
             ) : (
-              <span>{profile?.name || "User"}.</span>
+              <span>{displayName}</span>
             )}
           </h1>
           <p className="text-sm sm:text-base text-muted-dark font-medium mt-1">
@@ -656,10 +661,10 @@ export function DashboardContent() {
             <div className="relative z-10 space-y-3">
               <h2 className="text-lg sm:text-xl font-extrabold leading-snug">
                 Focus on what matters,{" "}
-                {isProfileLoading ? (
+                {isProfilePending ? (
                   <span className="inline-block w-24 h-5 bg-white/30 animate-pulse rounded align-middle" />
                 ) : (
-                  profile?.name || "User"
+                  profile?.name || (user ? "Pengguna Noctis" : "Tamu")
                 )}.
               </h2>
               <p className="text-xs text-white/90 leading-relaxed max-w-[220px]">
@@ -689,10 +694,10 @@ export function DashboardContent() {
               </div>
               <h3 className="font-bold text-xs sm:text-sm text-foreground">
                 You&apos;re doing great,{" "}
-                {isProfileLoading ? (
+                {isProfilePending ? (
                   <span className="inline-block w-20 h-4 bg-muted/20 animate-pulse rounded align-middle" />
                 ) : (
-                  profile?.name || "User"
+                  profile?.name || (user ? "Pengguna Noctis" : "Tamu")
                 )}.
               </h3>
               <p className="text-[11px] text-muted mt-0.5">

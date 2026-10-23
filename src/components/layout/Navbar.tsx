@@ -12,8 +12,10 @@ import {
   Search,
   Bell,
   Moon,
+  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 import { useData } from "@/lib/data-context";
 
 const navItems = [
@@ -27,8 +29,11 @@ const navItems = [
 
 export function Navbar() {
   const pathname = usePathname();
+  const { isLoggingOut } = useAuth();
   const { profile, isLoaded, isProfileLoading } = useData();
-  const initial = profile?.name ? profile.name.trim()[0].toUpperCase() : "U";
+
+  const isProfilePending = !isLoaded || isProfileLoading || isLoggingOut;
+  const initial = profile?.name?.trim() ? profile.name.trim()[0].toUpperCase() : null;
 
 
   return (
@@ -93,10 +98,12 @@ export function Navbar() {
             className="flex items-center gap-2 pl-1 sm:pl-2 border-l border-border/70 hover:opacity-90 transition-opacity"
           >
             <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary/20 to-primary/40 border-2 border-white shadow-sm flex items-center justify-center text-primary font-bold text-sm">
-              {!isLoaded || isProfileLoading ? (
+              {isProfilePending ? (
                 <span className="w-4 h-4 rounded-full bg-primary/30 animate-pulse" />
-              ) : (
+              ) : initial ? (
                 initial
+              ) : (
+                <User className="w-4 h-4 text-primary/70" />
               )}
             </div>
           </Link>

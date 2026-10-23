@@ -60,6 +60,10 @@ import {
   updateUserAgendaEvent,
   deleteUserAgendaEvent,
 } from "@/lib/supabase/agenda";
+import {
+  importUserDataAtomic,
+  type ImportAtomicPayload,
+} from "@/lib/supabase/import";
 
 export const LEGACY_STORAGE_KEYS = {
   tasks: "noctis_storage_tasks_v1",
@@ -91,8 +95,8 @@ export function getScopedStorageKey(
 const DEFAULT_USER_ID = "user-default";
 
 const DEFAULT_GUEST_PROFILE: UserProfile = {
-  name: "Faiz",
-  email: "faiz@example.com",
+  name: "Tamu",
+  email: "",
   title: "Personal Workspace",
 };
 
@@ -207,7 +211,7 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | null>(null);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const { user, isLoading: isAuthLoading, isLoggingOut } = useAuth();
 
   // Initialize with neutral / empty states to eliminate initial render flicker
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -221,19 +225,37 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
 
+  const currentUserId = user?.id ?? null;
+  const [activeUserId, setActiveUserId] = useState<string | null | undefined>(currentUserId);
+
+  // Synchronous state adjustment during render (React recommended pattern for prop/auth switching):
+  // When user changes (account switch, logout, login), synchronously reset in-memory state
+  // before children can render with stale data from the previous account.
+  if (activeUserId !== currentUserId) {
+    setActiveUserId(currentUserId);
+    setTasks([]);
+    setNotes([]);
+    setSchedules([]);
+    setAgendaEvents([]);
+    setProfile(EMPTY_PROFILE);
+    setIsDataLoading(true);
+    setIsProfileLoading(true);
+    setIsLoaded(false);
+  }
+
   const requestSeqRef = useRef<number>(0);
   const prevUserIdRef = useRef<string | null | undefined>(undefined);
 
   // 1. Unified lifecycle effect: waits for authentication status, isolates account states,
   //    and safely synchronizes Tasks, Schedules, Profile, and Preferences from Supabase.
   useEffect(() => {
-    // If Supabase authentication is still verifying the session, wait before touching data.
-    if (isAuthLoading) {
+    // If Supabase authentication is still verifying the session or in the process of logging out,
+    // wait before touching data.
+    if (isAuthLoading || isLoggingOut) {
       return;
     }
 
     const seq = ++requestSeqRef.current;
-    const currentUserId = user?.id ?? null;
     const isUserSwitched =
       prevUserIdRef.current !== undefined && prevUserIdRef.current !== currentUserId;
     prevUserIdRef.current = currentUserId;
@@ -302,7 +324,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
         const storedProfile = localStorage.getItem(LEGACY_STORAGE_KEYS.profile);
         if (storedProfile) {
-          setProfile(JSON.parse(storedProfile));
+          try {
+            const parsed = JSON.parse(storedProfile);
+            // Sanitize obsolete mock identity if present in browser localStorage
+            if (parsed.email === "faiz@example.com") {
+              parsed.email = "";
+            }
+            if (parsed.name === "Faiz") {
+              parsed.name = "Tamu";
+            }
+            setProfile(parsed);
+          } catch {
+            setProfile(DEFAULT_GUEST_PROFILE);
+          }
         } else {
           localStorage.setItem(
             LEGACY_STORAGE_KEYS.profile,
@@ -515,7 +549,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       loadSupabaseUserData();
     }
-  }, [user, isAuthLoading]);
+  }, [user, isAuthLoading, isLoggingOut]);
 
   // 2. Synchronize theme to document element class list & listen to system theme changes
   useEffect(() => {
@@ -1536,8 +1570,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const importAllData = useCallback(
     async (imported: ValidatedNoctisExport): Promise<void> => {
       if (!user) {
-        // ── GUEST MODE ──
-        if (imported.data.schedules) {
+        // ── GUEST MODE (REPLACE DATA IN LOCALSTORAGE & REACT STATE) ──
+
+        // Relationship Safety Check for Partial Payloads:
+        // If replacing schedules without providing tasks, ensure user has no linked tasks that would be severed
+        if (imported.data.schedules !== undefined && imported.data.tasks === undefined) {
+          const hasLinkedTasks = tasks.some((t) => Boolean(t.course_schedule_id));
+          if (hasLinkedTasks) {
+            throw new Error(
+              "Tidak dapat mengganti jadwal kuliah tanpa menyertakan tugas, karena ada tugas tersimpan yang terhubung ke jadwal saat ini. Sertakan data tugas dalam file impor untuk menjaga relasi jadwal secara aman."
+            );
+          }
+        }
+
+        // 1. Schedules (only replaced if schedules key is present in payload)
+        let activeSchedules = schedules;
+        if (imported.data.schedules !== undefined) {
           const sanitizedSchedules: CourseSchedule[] = imported.data.schedules.map((s) => ({
             id: s.id || generateId("sched"),
             user_id: DEFAULT_USER_ID,
@@ -1553,7 +1601,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             created_at: s.created_at || new Date().toISOString(),
             updated_at: s.updated_at || new Date().toISOString(),
           }));
+
           setSchedules(sanitizedSchedules);
+          activeSchedules = sanitizedSchedules;
           try {
             localStorage.setItem(
               LEGACY_STORAGE_KEYS.schedules,
@@ -1564,19 +1614,29 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        if (imported.data.tasks) {
-          const sanitizedTasks: Task[] = imported.data.tasks.map((t) => ({
-            id: t.id || generateId("task"),
-            user_id: DEFAULT_USER_ID,
-            title: t.title,
-            description: t.description,
-            due_at: t.due_at,
-            priority: t.priority as TaskPriority,
-            status: t.status as TaskStatus,
-            course_schedule_id: t.course_schedule_id,
-            created_at: t.created_at || new Date().toISOString(),
-            updated_at: t.updated_at || new Date().toISOString(),
-          }));
+        // 2. Tasks (only replaced if tasks key is present in payload)
+        if (imported.data.tasks !== undefined) {
+          const validScheduleIds = new Set(activeSchedules.map((s) => s.id));
+          const sanitizedTasks: Task[] = imported.data.tasks.map((t) => {
+            const resolvedScheduleId =
+              t.course_schedule_id && validScheduleIds.has(t.course_schedule_id)
+                ? t.course_schedule_id
+                : undefined;
+
+            return {
+              id: t.id || generateId("task"),
+              user_id: DEFAULT_USER_ID,
+              title: t.title,
+              description: t.description,
+              due_at: t.due_at,
+              priority: t.priority as TaskPriority,
+              status: t.status as TaskStatus,
+              course_schedule_id: resolvedScheduleId,
+              created_at: t.created_at || new Date().toISOString(),
+              updated_at: t.updated_at || new Date().toISOString(),
+            };
+          });
+
           setTasks(sanitizedTasks);
           try {
             localStorage.setItem(
@@ -1588,7 +1648,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        if (imported.data.notes) {
+        // 3. Notes (only replaced if notes key is present in payload)
+        if (imported.data.notes !== undefined) {
           const sanitizedNotes: Note[] = imported.data.notes.map((n) => ({
             id: n.id || generateId("note"),
             user_id: DEFAULT_USER_ID,
@@ -1600,6 +1661,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             created_at: n.created_at || new Date().toISOString(),
             updated_at: n.updated_at || new Date().toISOString(),
           }));
+
           setNotes(sanitizedNotes);
           try {
             localStorage.setItem(
@@ -1611,8 +1673,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        if (imported.data.agendaEvents) {
-          const sanitizedEvents: AgendaEvent[] = imported.data.agendaEvents.map((a) => ({
+        // 4. Agenda Events (only replaced if agendaEvents/agenda_events key is present)
+        const guestAgenda = imported.data.agendaEvents ?? imported.data.agenda_events;
+        if (guestAgenda !== undefined) {
+          const sanitizedEvents: AgendaEvent[] = guestAgenda.map((a) => ({
             id: a.id || generateId("agenda"),
             user_id: DEFAULT_USER_ID,
             title: a.title,
@@ -1624,6 +1688,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             created_at: a.created_at || new Date().toISOString(),
             updated_at: a.updated_at || new Date().toISOString(),
           }));
+
           setAgendaEvents(sanitizedEvents);
           try {
             localStorage.setItem(
@@ -1635,7 +1700,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        if (imported.profile) {
+        // 5. Profile (only update if provided in backup)
+        if (imported.profile !== undefined) {
           const newProfile: UserProfile = {
             name: imported.profile.name || DEFAULT_GUEST_PROFILE.name,
             email: imported.profile.email || DEFAULT_GUEST_PROFILE.email,
@@ -1652,7 +1718,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        if (imported.preferences) {
+        // 6. Preferences (only update if provided in backup)
+        if (imported.preferences !== undefined) {
           const newPrefs: UserPreferences = {
             theme: imported.preferences.theme || DEFAULT_PREFERENCES.theme,
             timezone: imported.preferences.timezone || DEFAULT_PREFERENCES.timezone,
@@ -1675,285 +1742,201 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // ── AUTHENTICATED USER MODE ──
-      const scheduleIdMap = new Map<string, string>();
-      const insertedSchedules: CourseSchedule[] = [];
-      const insertedTasks: Task[] = [];
-      const insertedNotes: Note[] = [];
-      const insertedAgendaEvents: AgendaEvent[] = [];
-      const importErrors: string[] = [];
-
-      // 1. Impor Schedules TERLEBIH DAHULU agar UUID baru dari database tersedia untuk dipetakan ke Tasks
-      if (imported.data.schedules && imported.data.schedules.length > 0) {
-        for (const s of imported.data.schedules) {
-          try {
-            const res = await createUserSchedule(user.id, {
-              course_name: s.course_name,
-              course_code: s.course_code,
-              day_of_week: s.day_of_week as DayOfWeek,
-              start_time: s.start_time,
-              end_time: s.end_time,
-              location: s.location,
-              recurrence_rule: s.recurrence_rule,
-              start_date: s.start_date,
-              end_date: s.end_date,
-            });
-
-            if (res.data) {
-              // Simpan pemetaan ID jadwal lama (misal "sched-001" atau UUID lama) ke UUID baru dari Supabase
-              scheduleIdMap.set(s.id, res.data.id);
-              insertedSchedules.push(res.data);
-            } else {
-              const msg = res.error?.message || "Gagal menyimpan jadwal kuliah";
-              importErrors.push(`Jadwal "${s.course_name}": ${msg}`);
-            }
-          } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : "Error tidak terduga";
-            importErrors.push(`Jadwal "${s.course_name}": ${msg}`);
-          }
+      // ── AUTHENTICATED USER MODE (ATOMIC DATABASE TRANSACTION VIA RPC) ──
+      // Relationship Safety Check for Partial Payloads:
+      // If replacing schedules without providing tasks, ensure user has no linked tasks that would be severed
+      if (imported.data.schedules !== undefined && imported.data.tasks === undefined) {
+        const hasLinkedTasks = tasks.some((t) => Boolean(t.course_schedule_id));
+        if (hasLinkedTasks) {
+          throw new Error(
+            "Tidak dapat mengganti jadwal kuliah tanpa menyertakan tugas, karena ada tugas tersimpan yang terhubung ke jadwal saat ini. Sertakan data tugas dalam file impor untuk menjaga relasi jadwal secara aman."
+          );
         }
       }
 
-      // 2. Impor Tasks SETELAH Schedules, petakan course_schedule_id secara eksplisit
-      if (imported.data.tasks && imported.data.tasks.length > 0) {
-        for (const t of imported.data.tasks) {
-          try {
-            let resolvedScheduleId: string | undefined = undefined;
+      const payload: ImportAtomicPayload = {};
 
-            if (t.course_schedule_id) {
-              if (scheduleIdMap.has(t.course_schedule_id)) {
-                // Berhasil dipetakan ke UUID jadwal yang baru diimpor
-                resolvedScheduleId = scheduleIdMap.get(t.course_schedule_id);
-              } else {
-                // Periksa apakah ID merujuk pada jadwal yang sudah ada sebelumnya di akun pengguna
-                const existing = schedules.find((s) => s.id === t.course_schedule_id);
-                if (existing) {
-                  resolvedScheduleId = existing.id;
-                } else {
-                  console.warn(
-                    `[Import] Jadwal dengan ID "${t.course_schedule_id}" untuk tugas "${t.title}" tidak ditemukan di file backup maupun jadwal akun aktif. Mengosongkan relasi jadwal agar tugas tetap tersimpan.`
-                  );
-                  resolvedScheduleId = undefined;
-                }
-              }
-            }
-
-            const res = await createUserTask(user.id, {
-              title: t.title,
-              description: t.description,
-              due_at: t.due_at,
-              priority: t.priority as TaskPriority,
-              status: t.status as TaskStatus,
-              course_schedule_id: resolvedScheduleId,
-            });
-
-            if (res.data) {
-              insertedTasks.push(res.data);
-            } else {
-              const msg = res.error?.message || "Gagal menyimpan tugas";
-              importErrors.push(`Tugas "${t.title}": ${msg}`);
-            }
-          } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : "Error tidak terduga";
-            importErrors.push(`Tugas "${t.title}": ${msg}`);
-          }
-        }
+      if (imported.data.schedules !== undefined) {
+        payload.schedules = imported.data.schedules.map((s) => ({
+          id: s.id,
+          course_name: s.course_name,
+          course_code: s.course_code,
+          day_of_week: s.day_of_week,
+          start_time: s.start_time,
+          end_time: s.end_time,
+          location: s.location,
+          recurrence_rule: s.recurrence_rule,
+          start_date: s.start_date,
+          end_date: s.end_date,
+          created_at: s.created_at,
+          updated_at: s.updated_at,
+        }));
       }
 
-      // 3. Impor Notes
-      if (imported.data.notes && imported.data.notes.length > 0) {
-        for (const n of imported.data.notes) {
-          try {
-            const res = await createUserNote(user.id, {
-              title: n.title,
-              content: n.content,
-              category: n.category,
-              tags: n.tags,
-              is_favorite: Boolean(n.is_favorite),
-            });
-
-            if (res.data) {
-              insertedNotes.push(res.data);
-            } else {
-              const msg = res.error?.message || "Gagal menyimpan catatan";
-              importErrors.push(`Catatan "${n.title}": ${msg}`);
-            }
-          } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : "Error tidak terduga";
-            importErrors.push(`Catatan "${n.title}": ${msg}`);
-          }
-        }
+      if (imported.data.tasks !== undefined) {
+        payload.tasks = imported.data.tasks.map((t) => ({
+          id: t.id,
+          title: t.title,
+          description: t.description,
+          due_at: t.due_at,
+          priority: t.priority,
+          status: t.status,
+          course_schedule_id: t.course_schedule_id,
+          created_at: t.created_at,
+          updated_at: t.updated_at,
+        }));
       }
 
-      // 4. Impor Agenda
-      if (imported.data.agendaEvents && imported.data.agendaEvents.length > 0) {
-        for (const a of imported.data.agendaEvents) {
-          try {
-            const res = await createUserAgendaEvent(user.id, {
-              title: a.title,
-              description: a.description,
-              start_at: a.start_at,
-              end_at: a.end_at,
-              location: a.location,
-              reminder_minutes: a.reminder_minutes,
-            });
-
-            if (res.data) {
-              insertedAgendaEvents.push(res.data);
-            } else {
-              const msg = res.error?.message || "Gagal menyimpan agenda";
-              importErrors.push(`Agenda "${a.title}": ${msg}`);
-            }
-          } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : "Error tidak terduga";
-            importErrors.push(`Agenda "${a.title}": ${msg}`);
-          }
-        }
+      if (imported.data.notes !== undefined) {
+        payload.notes = imported.data.notes.map((n) => ({
+          id: n.id,
+          title: n.title,
+          content: n.content,
+          category: n.category,
+          tags: n.tags,
+          is_favorite: Boolean(n.is_favorite),
+          created_at: n.created_at,
+          updated_at: n.updated_at,
+        }));
       }
 
-      // 5. Perbarui State & Scoped LocalStorage dengan ID aktual hasil insert Supabase
-      if (insertedSchedules.length > 0) {
-        setSchedules((prev) => {
-          const next = [...insertedSchedules, ...prev];
-          try {
-            const key = getScopedStorageKey(user.id, "schedules");
-            localStorage.setItem(key, JSON.stringify(next));
-          } catch (e) {
-            console.warn("Error caching scoped schedules", e);
-          }
-          return next;
-        });
+      const rawAgenda = imported.data.agendaEvents ?? imported.data.agenda_events;
+      if (rawAgenda !== undefined) {
+        payload.agenda_events = rawAgenda.map((a) => ({
+          id: a.id,
+          title: a.title,
+          description: a.description,
+          start_at: a.start_at,
+          end_at: a.end_at,
+          location: a.location,
+          reminder_minutes: a.reminder_minutes,
+          created_at: a.created_at,
+          updated_at: a.updated_at,
+        }));
       }
 
-      if (insertedTasks.length > 0) {
-        setTasks((prev) => {
-          const next = [...insertedTasks, ...prev];
-          try {
-            const key = getScopedStorageKey(user.id, "tasks");
-            localStorage.setItem(key, JSON.stringify(next));
-          } catch (e) {
-            console.warn("Error caching scoped tasks", e);
-          }
-          return next;
-        });
-      }
-
-      if (insertedNotes.length > 0) {
-        setNotes((prev) => {
-          const next = [...insertedNotes, ...prev];
-          try {
-            const key = getScopedStorageKey(user.id, "notes");
-            localStorage.setItem(key, JSON.stringify(next));
-          } catch (e) {
-            console.warn("Error caching scoped notes", e);
-          }
-          return next;
-        });
-      }
-
-      if (insertedAgendaEvents.length > 0) {
-        setAgendaEvents((prev) => {
-          const next = [...insertedAgendaEvents, ...prev];
-          try {
-            const key = getScopedStorageKey(user.id, "agenda");
-            localStorage.setItem(key, JSON.stringify(next));
-          } catch (e) {
-            console.warn("Error caching scoped agenda", e);
-          }
-          return next;
-        });
-      }
-
-      // 6. Profil & Preferensi
-      if (imported.profile) {
-        const newProfile: UserProfile = {
-          name:
-            imported.profile.name ||
-            user.user_metadata?.name ||
-            user.email?.split("@")[0] ||
-            "User",
-          email: user.email || "",
-          title: imported.profile.title || DEFAULT_GUEST_PROFILE.title,
+      if (imported.profile !== undefined) {
+        payload.profile = {
+          name: imported.profile.name,
+          title: imported.profile.title,
         };
-        setProfile(newProfile);
+      }
 
+      if (imported.preferences !== undefined) {
+        payload.preferences = {
+          theme: imported.preferences.theme,
+          timezone: imported.preferences.timezone,
+          notifications: imported.preferences.notifications,
+        };
+      }
+
+      const res = await importUserDataAtomic(payload);
+      if (res.error || !res.data) {
+        throw new Error(res.error?.message || "Gagal mengimpor data ke Supabase.");
+      }
+
+      const {
+        schedules: newSchedules,
+        tasks: newTasks,
+        notes: newNotes,
+        agendaEvents: newAgenda,
+        profile: newProfile,
+        preferences: newPrefs,
+      } = res.data;
+
+      // Update React State & Scoped LocalStorage ONLY for categories present in result
+      if (newSchedules !== undefined) {
+        setSchedules(newSchedules);
         try {
-          const res = await apiUpdateUserProfile(user.id, {
-            name: newProfile.name,
-            title: newProfile.title,
-          });
-          if (res.error) {
-            importErrors.push(`Profil: ${res.error.message}`);
-          }
+          const key = getScopedStorageKey(user.id, "schedules");
+          localStorage.setItem(key, JSON.stringify(newSchedules));
+        } catch (e) {
+          console.warn("Error caching scoped schedules", e);
+        }
+      }
+
+      if (newTasks !== undefined) {
+        setTasks(newTasks);
+        try {
+          const key = getScopedStorageKey(user.id, "tasks");
+          localStorage.setItem(key, JSON.stringify(newTasks));
+        } catch (e) {
+          console.warn("Error caching scoped tasks", e);
+        }
+      }
+
+      if (newNotes !== undefined) {
+        setNotes(newNotes);
+        try {
+          const key = getScopedStorageKey(user.id, "notes");
+          localStorage.setItem(key, JSON.stringify(newNotes));
+        } catch (e) {
+          console.warn("Error caching scoped notes", e);
+        }
+      }
+
+      if (newAgenda !== undefined) {
+        setAgendaEvents(newAgenda);
+        try {
+          const key = getScopedStorageKey(user.id, "agenda");
+          localStorage.setItem(key, JSON.stringify(newAgenda));
+        } catch (e) {
+          console.warn("Error caching scoped agenda", e);
+        }
+      }
+
+      if (newProfile !== undefined) {
+        setProfile(newProfile);
+        try {
           const key = getScopedStorageKey(user.id, "profile");
           localStorage.setItem(key, JSON.stringify(newProfile));
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : "Gagal menyimpan profil";
-          importErrors.push(`Profil: ${msg}`);
+        } catch (e) {
+          console.warn("Error caching scoped profile", e);
         }
       }
 
-      if (imported.preferences) {
-        const newPrefs: UserPreferences = {
-          theme: imported.preferences.theme || DEFAULT_PREFERENCES.theme,
-          timezone: imported.preferences.timezone || DEFAULT_PREFERENCES.timezone,
-          notifications: {
-            ...DEFAULT_PREFERENCES.notifications,
-            ...(imported.preferences.notifications || {}),
-          },
-        };
+      if (newPrefs !== undefined) {
         setPreferences(newPrefs);
-
         try {
-          const res = await apiUpdateUserPreferences(user.id, newPrefs);
-          if (res.error) {
-            importErrors.push(`Preferensi: ${res.error.message}`);
-          }
           const key = getScopedStorageKey(user.id, "preferences");
           localStorage.setItem(key, JSON.stringify(newPrefs));
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : "Gagal menyimpan preferensi";
-          importErrors.push(`Preferensi: ${msg}`);
+        } catch (e) {
+          console.warn("Error caching scoped preferences", e);
         }
       }
-
-      // 7. Jika ada kegagalan, lemparkan error informatif
-      if (importErrors.length > 0) {
-        throw new Error(
-          `Sebagian data gagal diimpor ke Supabase:\n${importErrors.slice(0, 3).join("\n")}${
-            importErrors.length > 3 ? `\n...dan ${importErrors.length - 3} kesalahan lainnya` : ""
-          }`
-        );
-      }
     },
-    [user, schedules]
+    [user, tasks, schedules]
   );
+
+  // Derived pending status: whenever auth is loading, logging out, or active user is switching,
+  // enforce neutral empty/loading states so consumers never see stale profile or data.
+  const isPendingAuth = isAuthLoading || isLoggingOut || activeUserId !== currentUserId;
 
   const value = useMemo(
     () => ({
-      tasks,
+      tasks: isPendingAuth ? [] : tasks,
       addTask,
       updateTask,
       deleteTask,
       toggleTaskStatus,
 
-      notes,
+      notes: isPendingAuth ? [] : notes,
       addNote,
       updateNote,
       deleteNote,
       toggleNoteFavorite,
 
-      schedules,
+      schedules: isPendingAuth ? [] : schedules,
       addSchedule,
       updateSchedule,
       deleteSchedule,
 
-      agendaEvents,
+      agendaEvents: isPendingAuth ? [] : agendaEvents,
       addAgendaEvent,
       updateAgendaEvent,
       deleteAgendaEvent,
 
-      profile,
+      profile: isPendingAuth ? EMPTY_PROFILE : profile,
       updateProfile,
 
       preferences,
@@ -1963,12 +1946,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       exportAllData,
       importAllData,
 
-      isAuthLoading,
-      isProfileLoading,
-      isDataLoading,
-      isLoaded,
+      isAuthLoading: isPendingAuth || isAuthLoading,
+      isProfileLoading: isPendingAuth || isProfileLoading,
+      isDataLoading: isPendingAuth || isDataLoading,
+      isLoaded: isPendingAuth ? false : isLoaded,
     }),
     [
+      isPendingAuth,
       tasks,
       addTask,
       updateTask,

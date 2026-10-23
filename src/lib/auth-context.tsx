@@ -1,6 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
+import { usePathname } from "next/navigation";
 import type { User, Session } from "@supabase/supabase-js";
 import { createBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 
@@ -8,6 +9,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   isLoading: boolean;
+  isLoggingOut: boolean;
   signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
 }
@@ -16,14 +18,26 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   session: null,
   isLoading: true,
+  isLoggingOut: false,
   signOut: async () => {},
   refreshSession: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const isLoggingOutRef = useRef(false);
+
+  // Reset isLoggingOut cleanly once route navigation (e.g. to /login) has taken effect
+  useEffect(() => {
+    if (isLoggingOutRef.current) {
+      isLoggingOutRef.current = false;
+      setIsLoggingOut(false);
+    }
+  }, [pathname]);
 
   const refreshSession = useCallback(async () => {
     const supabase = createBrowserClient();
@@ -59,10 +73,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // 2. Real-time auth state listener
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+    } = supabase.auth.onAuthStateChange((event, currentSession) => {
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
       setIsLoading(false);
+      if (event === "SIGNED_IN") {
+        isLoggingOutRef.current = false;
+        setIsLoggingOut(false);
+      }
     });
 
     return () => {
@@ -71,12 +89,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    const supabase = createBrowserClient();
-    if (supabase) {
-      await supabase.auth.signOut();
+    isLoggingOutRef.current = true;
+    setIsLoggingOut(true);
+    setIsLoading(true);
+    try {
+      const supabase = createBrowserClient();
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
+    } catch (err) {
+      isLoggingOutRef.current = false;
+      setIsLoggingOut(false);
+      setIsLoading(false);
+      throw err;
+    } finally {
+      setUser(null);
+      setSession(null);
+      setIsLoading(false);
+      // Fallback safety timeout in case route change is delayed or not triggered
+      setTimeout(() => {
+        if (isLoggingOutRef.current) {
+          isLoggingOutRef.current = false;
+          setIsLoggingOut(false);
+        }
+      }, 4000);
     }
-    setUser(null);
-    setSession(null);
   }, []);
 
   return (
@@ -85,6 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         session,
         isLoading,
+        isLoggingOut,
         signOut,
         refreshSession,
       }}

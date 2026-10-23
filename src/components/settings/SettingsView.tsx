@@ -51,9 +51,10 @@ export function SettingsView() {
   } = useData();
 
   const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { user, signOut, isLoggingOut: isAuthLoggingOut } = useAuth();
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const isLogoutPending = isLoggingOut || isAuthLoggingOut;
 
   // Profile modal state
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -246,17 +247,17 @@ export function SettingsView() {
     try {
       await signOut();
       toast.success("Berhasil keluar dari akun.");
-      router.push("/login");
+      router.replace("/login");
       router.refresh();
     } catch {
       toast.error("Gagal keluar dari akun. Silakan coba lagi.");
-    } finally {
       setIsLoggingOut(false);
       setIsLogoutModalOpen(false);
     }
   };
 
-  const avatarInitial = profile.name ? profile.name.trim()[0].toUpperCase() : "U";
+  const avatarInitial = profile.name?.trim() ? profile.name.trim()[0].toUpperCase() : null;
+  const isProfilePending = !isLoaded || isProfileLoading || isLogoutPending;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -289,7 +290,7 @@ export function SettingsView() {
             </div>
           }
         />
-        {!isLoaded || isProfileLoading ? (
+        {isProfilePending ? (
           <div className="flex items-center gap-4 animate-pulse">
             <div className="w-16 h-16 rounded-2xl bg-muted/20 shrink-0" />
             <div className="min-w-0 space-y-2 flex-1">
@@ -301,13 +302,15 @@ export function SettingsView() {
         ) : (
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-primary/20 to-primary/40 border-2 border-white shadow-sm flex items-center justify-center text-primary font-bold text-2xl shrink-0">
-              {avatarInitial}
+              {avatarInitial || <User className="w-8 h-8 text-primary/70" />}
             </div>
             <div className="min-w-0">
               <h3 className="font-bold text-base sm:text-lg text-foreground truncate">
-                {profile.name || "User"}
+                {profile.name || (user ? "Pengguna Noctis" : "Tamu")}
               </h3>
-              <p className="text-sm text-muted-dark truncate">{user?.email || profile.email}</p>
+              <p className="text-sm text-muted-dark truncate">
+                {user?.email || profile.email || "Mode Tamu (Penyimpanan Lokal)"}
+              </p>
               <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                 {user ? (
                   <Badge variant="primary" className="text-[11px] flex items-center gap-1">
@@ -324,11 +327,15 @@ export function SettingsView() {
             </div>
           </div>
         )}
-        <p className="text-xs text-muted mt-4 border-t border-border/70 pt-3">
-          {user
-            ? `Terautentikasi sebagai ${user.email}. ID Pengguna: ${user.id.slice(0, 8)}...`
-            : "Perubahan profil disimpan di penyimpanan lokal perangkat."}
-        </p>
+        <div className="text-xs text-muted mt-4 border-t border-border/70 pt-3">
+          {isProfilePending ? (
+            <div className="w-56 h-3.5 bg-muted/20 animate-pulse rounded" />
+          ) : user ? (
+            `Terautentikasi sebagai ${user.email}. ID Pengguna: ${user.id.slice(0, 8)}...`
+          ) : (
+            "Perubahan profil disimpan di penyimpanan lokal perangkat."
+          )}
+        </div>
       </Card>
 
       {/* ── 2. Notification Preferences Card ── */}
@@ -698,10 +705,10 @@ export function SettingsView() {
             <div className="grid grid-cols-2 gap-2 text-muted-dark">
               <p>• Versi Format: <span className="font-bold text-foreground">{pendingImport?.version}</span></p>
               <p>• Nama Profil: <span className="font-bold text-foreground">{pendingImport?.profile?.name || "-"}</span></p>
-              <p>• Jumlah Tugas: <span className="font-bold text-foreground">{pendingImport?.data.tasks.length ?? 0}</span></p>
-              <p>• Jumlah Catatan: <span className="font-bold text-foreground">{pendingImport?.data.notes.length ?? 0}</span></p>
-              <p>• Jadwal Kuliah: <span className="font-bold text-foreground">{pendingImport?.data.schedules.length ?? 0}</span></p>
-              <p>• Agenda Kegiatan: <span className="font-bold text-foreground">{pendingImport?.data.agendaEvents.length ?? 0}</span></p>
+              <p>• Jumlah Tugas: <span className="font-bold text-foreground">{pendingImport?.data.tasks !== undefined ? pendingImport.data.tasks.length : "Tidak diubah"}</span></p>
+              <p>• Jumlah Catatan: <span className="font-bold text-foreground">{pendingImport?.data.notes !== undefined ? pendingImport.data.notes.length : "Tidak diubah"}</span></p>
+              <p>• Jadwal Kuliah: <span className="font-bold text-foreground">{pendingImport?.data.schedules !== undefined ? pendingImport.data.schedules.length : "Tidak diubah"}</span></p>
+              <p>• Agenda Kegiatan: <span className="font-bold text-foreground">{(pendingImport?.data.agendaEvents ?? pendingImport?.data.agenda_events) !== undefined ? (pendingImport?.data.agendaEvents ?? pendingImport?.data.agenda_events)?.length : "Tidak diubah"}</span></p>
             </div>
             {pendingImport?.exported_at && (
               <p className="text-[11px] text-muted pt-1">
@@ -713,7 +720,7 @@ export function SettingsView() {
           <div className="flex items-start gap-2.5 p-3 rounded-xl bg-warning-light text-warning text-xs">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <p>
-              <strong>Peringatan:</strong> Seluruh data Tugas, Catatan, Jadwal, dan Agenda yang sedang tersimpan saat ini akan digantikan dengan data dari file cadangan ini.
+              <strong>Peringatan:</strong> Kategori data yang disertakan dalam file cadangan akan digantikan, sementara kategori yang tidak disertakan akan tetap dipertahankan.
             </p>
           </div>
 
