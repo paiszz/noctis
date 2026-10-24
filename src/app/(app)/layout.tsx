@@ -1,6 +1,6 @@
 import { Navbar, MobileNav } from "@/components/layout";
 import { DataProvider } from "@/lib/data-context";
-import { Toaster } from "sonner";
+import { Toaster } from "@/components/ui";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -18,7 +18,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <MobileNav />
 
         {/* Sonner Toast Notification */}
-        <Toaster position="bottom-right" richColors theme="light" />
+        <Toaster position="bottom-right" richColors />
       </div>
     </DataProvider>
   );

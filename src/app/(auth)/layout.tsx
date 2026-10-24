@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Toaster } from "sonner";
+import { Toaster } from "@/components/ui";
 
 export const metadata: Metadata = {
   title: "Autentikasi",
@@ -14,7 +14,7 @@ export default function AuthLayout({
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
       <div className="w-full max-w-md">{children}</div>
-      <Toaster position="bottom-right" richColors theme="light" />
+      <Toaster position="bottom-right" richColors />
     </div>
   );
 }
