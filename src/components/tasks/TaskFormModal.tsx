@@ -183,7 +183,7 @@ export function TaskFormModal({
               type="datetime-local"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
-              className="w-full px-3 py-2 text-xs sm:text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus [color-scheme:light] dark:[color-scheme:dark]"
+              className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus hover:border-primary/40 transition-colors [color-scheme:light] dark:[color-scheme:dark]"
             />
           </div>
 
@@ -199,10 +199,10 @@ export function TaskFormModal({
               id="task-priority"
               value={priority}
               onChange={(e) => setPriority(e.target.value as TaskPriority)}
-              className="w-full px-3 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus"
+              className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus hover:border-primary/40 transition-colors cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
             >
               {(Object.keys(PRIORITY_LABELS) as TaskPriority[]).map((p) => (
-                <option key={p} value={p}>
+                <option key={p} value={p} className="bg-surface text-foreground">
                   {PRIORITY_LABELS[p]}
                 </option>
               ))}
@@ -224,10 +224,10 @@ export function TaskFormModal({
               id="task-status"
               value={status}
               onChange={(e) => setStatus(e.target.value as TaskStatus)}
-              className="w-full px-3 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus"
+              className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus hover:border-primary/40 transition-colors cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
             >
               {(Object.keys(STATUS_LABELS) as TaskStatus[]).map((s) => (
-                <option key={s} value={s}>
+                <option key={s} value={s} className="bg-surface text-foreground">
                   {STATUS_LABELS[s]}
                 </option>
               ))}
@@ -246,11 +246,13 @@ export function TaskFormModal({
               id="task-course"
               value={courseScheduleId}
               onChange={(e) => setCourseScheduleId(e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus"
+              className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus hover:border-primary/40 transition-colors cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
             >
-              <option value="">-- Tidak terkait matkul --</option>
+              <option value="" className="bg-surface text-foreground">
+                -- Tidak terkait matkul --
+              </option>
               {schedules.map((s) => (
-                <option key={s.id} value={s.id}>
+                <option key={s.id} value={s.id} className="bg-surface text-foreground">
                   {s.course_name} {s.course_code ? `(${s.course_code})` : ""}
                 </option>
               ))}

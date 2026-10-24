@@ -183,7 +183,7 @@ export function ScheduleFormModal({
               id="sched-day"
               value={dayOfWeek}
               onChange={(e) => setDayOfWeek(Number(e.target.value) as DayOfWeek)}
-              className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus cursor-pointer"
+              className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus hover:border-primary/40 transition-colors cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
             >
               {DAYS.map((d) => (
                 <option key={d} value={d} className="bg-surface text-foreground">
@@ -213,7 +213,7 @@ export function ScheduleFormModal({
                   setStartTime(e.target.value);
                   if (errors.time) setErrors((prev) => ({ ...prev, time: undefined }));
                 }}
-                className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus [color-scheme:light] dark:[color-scheme:dark]"
+                className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus hover:border-primary/40 transition-colors [color-scheme:light] dark:[color-scheme:dark]"
               />
             </div>
 
@@ -233,7 +233,7 @@ export function ScheduleFormModal({
                   setEndTime(e.target.value);
                   if (errors.time) setErrors((prev) => ({ ...prev, time: undefined }));
                 }}
-                className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus [color-scheme:light] dark:[color-scheme:dark]"
+                className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus hover:border-primary/40 transition-colors [color-scheme:light] dark:[color-scheme:dark]"
               />
             </div>
           </div>

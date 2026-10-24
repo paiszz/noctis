@@ -214,13 +214,13 @@ export function TasksView() {
             <select
               value={filterPriority}
               onChange={(e) => setFilterPriority(e.target.value as FilterPriority)}
-              className="bg-surface border border-border/80 text-foreground text-xs sm:text-sm rounded-xl px-3 py-2 pr-8 shadow-sm focus:outline-none focus:border-border-focus cursor-pointer"
+              className="bg-surface border border-border/80 text-foreground text-xs sm:text-sm rounded-xl px-3.5 py-2 pr-8 shadow-sm hover:border-primary/40 focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus transition-colors cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
               aria-label="Filter berdasarkan prioritas"
             >
-              <option value="all">Semua Prioritas</option>
-              <option value="high">Prioritas Tinggi</option>
-              <option value="medium">Prioritas Sedang</option>
-              <option value="low">Prioritas Rendah</option>
+              <option value="all" className="bg-surface text-foreground">Semua Prioritas</option>
+              <option value="high" className="bg-surface text-foreground">Prioritas Tinggi</option>
+              <option value="medium" className="bg-surface text-foreground">Prioritas Sedang</option>
+              <option value="low" className="bg-surface text-foreground">Prioritas Rendah</option>
             </select>
           </div>
         </div>

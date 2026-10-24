@@ -529,11 +529,11 @@ export function SettingsView() {
                   toast.error(`Gagal mengubah zona waktu: ${msg}`);
                 }
               }}
-              className="bg-surface border border-border/80 text-foreground text-xs sm:text-sm rounded-xl px-3 py-2 shadow-sm focus:outline-none focus:border-border-focus cursor-pointer shrink-0"
+              className="bg-surface border border-border/80 text-foreground text-xs sm:text-sm rounded-xl px-3.5 py-2 pr-8 shadow-sm hover:border-primary/40 focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus transition-colors cursor-pointer shrink-0 [color-scheme:light] dark:[color-scheme:dark]"
               aria-label="Pilih zona waktu"
             >
               {TIMEZONE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
+                <option key={opt.value} value={opt.value} className="bg-surface text-foreground">
                   {opt.label}
                 </option>
               ))}

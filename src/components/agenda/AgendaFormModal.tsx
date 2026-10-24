@@ -198,7 +198,7 @@ export function AgendaFormModal({
                   setStartAt(e.target.value);
                   if (errors.time) setErrors((prev) => ({ ...prev, time: undefined }));
                 }}
-                className="w-full px-3 py-2 text-xs sm:text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus [color-scheme:light] dark:[color-scheme:dark]"
+                className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus hover:border-primary/40 transition-colors [color-scheme:light] dark:[color-scheme:dark]"
               />
             </div>
 
@@ -217,7 +217,7 @@ export function AgendaFormModal({
                   setEndAt(e.target.value);
                   if (errors.time) setErrors((prev) => ({ ...prev, time: undefined }));
                 }}
-                className="w-full px-3 py-2 text-xs sm:text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus [color-scheme:light] dark:[color-scheme:dark]"
+                className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus hover:border-primary/40 transition-colors [color-scheme:light] dark:[color-scheme:dark]"
               />
             </div>
           </div>
@@ -257,10 +257,10 @@ export function AgendaFormModal({
               id="agenda-rem"
               value={reminderMinutes}
               onChange={(e) => setReminderMinutes(e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus cursor-pointer"
+              className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus hover:border-primary/40 transition-colors cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
             >
               {REMINDER_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
+                <option key={opt.value} value={opt.value} className="bg-surface text-foreground">
                   {opt.label}
                 </option>
               ))}
