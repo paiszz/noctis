@@ -155,7 +155,7 @@ export function NotesView() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 text-sm bg-surface border border-border/80 rounded-xl
               text-foreground placeholder:text-muted shadow-sm
-              focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus"
+              focus:outline-none focus:border-border-focus"
           />
         </div>
         <Button

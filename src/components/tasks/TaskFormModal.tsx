@@ -166,7 +166,7 @@ export function TaskFormModal({
               setTitle(e.target.value);
               if (errors.title) setErrors({});
             }}
-            className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground placeholder:text-muted focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus"
+            className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground placeholder:text-muted focus:outline-none focus:border-border-focus"
           />
           {errors.title && (
             <p className="text-xs text-danger mt-1">{errors.title}</p>
@@ -187,7 +187,7 @@ export function TaskFormModal({
             placeholder="Tambahkan catatan atau instruksi singkat..."
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground placeholder:text-muted focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus resize-none"
+            className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground placeholder:text-muted focus:outline-none focus:border-border-focus resize-none"
           />
         </div>
 

@@ -48,7 +48,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data } = await supabase.auth.getSession();
       setSession(data.session);
-      setUser(data.session?.user ?? null);
+      setUser((prevUser) => {
+        const nextUser = data.session?.user ?? null;
+        if (!prevUser && !nextUser) return null;
+        if (
+          prevUser &&
+          nextUser &&
+          prevUser.id === nextUser.id &&
+          prevUser.email === nextUser.email &&
+          prevUser.updated_at === nextUser.updated_at
+        ) {
+          return prevUser;
+        }
+        return nextUser;
+      });
     } catch {
       // Fallback if network fails
     } finally {
@@ -75,7 +88,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, currentSession) => {
       setSession(currentSession);
-      setUser(currentSession?.user ?? null);
+      setUser((prevUser) => {
+        const nextUser = currentSession?.user ?? null;
+        if (!prevUser && !nextUser) return null;
+        if (
+          prevUser &&
+          nextUser &&
+          prevUser.id === nextUser.id &&
+          prevUser.email === nextUser.email &&
+          prevUser.updated_at === nextUser.updated_at
+        ) {
+          return prevUser;
+        }
+        return nextUser;
+      });
       setIsLoading(false);
       if (event === "SIGNED_IN") {
         isLoggingOutRef.current = false;

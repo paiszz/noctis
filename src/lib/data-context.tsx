@@ -289,6 +289,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const requestSeqRef = useRef<number>(0);
   const prevUserIdRef = useRef<string | null | undefined>(undefined);
+  const isLoadedRef = useRef(false);
+  isLoadedRef.current = isLoaded;
 
   // 1. Unified lifecycle effect: waits for authentication status, isolates account states,
   //    and safely synchronizes Tasks, Schedules, Profile, and Preferences from Supabase.
@@ -302,6 +304,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const seq = ++requestSeqRef.current;
     const isUserSwitched =
       prevUserIdRef.current !== undefined && prevUserIdRef.current !== currentUserId;
+
+    // Prevent redundant reload and remounting when user has not switched and data is already loaded
+    if (!isUserSwitched && prevUserIdRef.current !== undefined && isLoadedRef.current) {
+      return;
+    }
+
     prevUserIdRef.current = currentUserId;
 
     setIsDataLoading(true);
@@ -593,7 +601,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       loadSupabaseUserData();
     }
-  }, [user, isAuthLoading, isLoggingOut]);
+  }, [currentUserId, isAuthLoading, isLoggingOut]);
 
   // 2. Synchronize theme to document element class list & listen to system theme changes
   useEffect(() => {

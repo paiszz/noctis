@@ -174,10 +174,24 @@ body {
    Focus styles — accessible keyboard nav
    ======================================== */
 
-*:focus-visible {
+:focus-visible {
   outline: 2px solid var(--noctis-primary);
   outline-offset: 2px;
-  border-radius: var(--noctis-radius-sm);
+}
+
+/* Form controls and elements with custom Noctis focus rings:
+   Maintain a single, crisp focus ring via border-border-focus and eliminate redundant outer box-shadow/outline layers */
+:is(input, textarea, select, [role="combobox"]):focus,
+:is(input, textarea, select, [role="combobox"]):focus-visible,
+.focus\:outline-none:focus,
+.focus\:outline-none:focus-visible,
+.focus-visible\:outline-none:focus-visible {
+  outline: none;
+}
+
+:is(input, textarea, select, [role="combobox"]):focus,
+:is(input, textarea, select, [role="combobox"]):focus-visible {
+  box-shadow: none !important;
 }
 
 /* ========================================

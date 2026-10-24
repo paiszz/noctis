@@ -359,10 +359,10 @@ export function DatePicker({
         onClick={() => (isOpen ? closePopover() : openPopover())}
         className={cn(
           "w-full flex items-center justify-between gap-2.5 border text-foreground text-left",
-          "hover:border-primary/40 focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus",
+          "hover:border-primary/40 focus:outline-none focus:border-border-focus",
           "transition-all duration-150 cursor-pointer select-none",
           disabled && "opacity-50 cursor-not-allowed hover:border-border/80",
-          isOpen && "border-border-focus ring-1 ring-border-focus",
+          isOpen && "border-border-focus",
           variantStyles,
           sizeStyles,
           triggerClassName

@@ -106,7 +106,7 @@ export function Modal({
         </div>
 
         {/* Modal Body: Internal scrolling when content is long */}
-        <div className="overflow-y-auto py-3 sm:py-4 flex-1 overscroll-contain pr-1 -mr-1">
+        <div className="overflow-y-auto py-3 sm:py-4 flex-1 overscroll-contain px-1.5 -mx-1.5">
           {children}
         </div>
       </div>
