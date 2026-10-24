@@ -208,6 +208,50 @@ interface DataContextType {
   isLoaded: boolean;
 }
 
+function getInitialPreferences(): UserPreferences {
+  if (typeof window === "undefined") {
+    return DEFAULT_PREFERENCES;
+  }
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith("noctis_user_") && key.endsWith("_preferences_v1")) {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object") {
+            return {
+              ...DEFAULT_PREFERENCES,
+              ...parsed,
+              notifications: {
+                ...DEFAULT_PREFERENCES.notifications,
+                ...(parsed.notifications || {}),
+              },
+            };
+          }
+        }
+      }
+    }
+    const rawGuest = localStorage.getItem(LEGACY_STORAGE_KEYS.preferences);
+    if (rawGuest) {
+      const parsed = JSON.parse(rawGuest);
+      if (parsed && typeof parsed === "object") {
+        return {
+          ...DEFAULT_PREFERENCES,
+          ...parsed,
+          notifications: {
+            ...DEFAULT_PREFERENCES.notifications,
+            ...(parsed.notifications || {}),
+          },
+        };
+      }
+    }
+  } catch {
+    // Fallback safely to default preferences
+  }
+  return DEFAULT_PREFERENCES;
+}
+
 const DataContext = createContext<DataContextType | null>(null);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
@@ -219,7 +263,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [schedules, setSchedules] = useState<CourseSchedule[]>([]);
   const [agendaEvents, setAgendaEvents] = useState<AgendaEvent[]>([]);
   const [profile, setProfile] = useState<UserProfile>(EMPTY_PROFILE);
-  const [preferences, setPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
+  const [preferences, setPreferences] = useState<UserPreferences>(getInitialPreferences);
 
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [isProfileLoading, setIsProfileLoading] = useState(true);

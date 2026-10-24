@@ -222,3 +222,30 @@ body {
       transform 0.15s ease, opacity 0.15s ease;
   }
 }
+
+/* ========================================
+   Page transitions — smooth fade-up
+   ======================================== */
+
+@keyframes fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}

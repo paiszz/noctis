@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useCallback } from "react";
+import React, { useEffect, useCallback, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,12 @@ export function Modal({
   children,
   maxWidth = "md",
 }: ModalProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Handle ESC key to close
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -39,44 +46,47 @@ export function Modal({
   );
 
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-      window.addEventListener("keydown", handleKeyDown);
-    } else {
-      document.body.style.overflow = "";
-    }
+    if (!isOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = originalOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen, handleKeyDown]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted || typeof document === "undefined") return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="modal-title"
     >
-      {/* Backdrop */}
+      {/* Backdrop: Clean dark transparent overlay without background blur */}
       <div
-        className="fixed inset-0 bg-[#070708]/40 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-[#070708]/50 dark:bg-black/65 transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
 
-      {/* Modal Dialog Card */}
+      {/* Modal Dialog Card: Centered, viewport-bounded, with internal scrolling */}
       <div
         className={cn(
-          "relative w-full bg-surface rounded-3xl border border-border/80 shadow-dropdown p-5 sm:p-6 my-8 z-10 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col",
+          "relative w-full bg-surface rounded-2xl sm:rounded-3xl border border-border/80 shadow-dropdown p-5 sm:p-6 z-10 flex flex-col",
+          "max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] sm:max-h-[calc(100dvh-3rem)]",
+          "animate-in fade-in zoom-in-95 duration-150",
           maxWidthStyles[maxWidth]
         )}
       >
         {/* Modal Header */}
         <div className="flex items-start justify-between gap-4 pb-3 border-b border-border/60 shrink-0">
           <div>
-            <h2 className="text-lg sm:text-xl font-bold text-foreground tracking-tight">
+            <h2 id="modal-title" className="text-lg sm:text-xl font-bold text-foreground tracking-tight">
               {title}
             </h2>
             {description && (
@@ -88,16 +98,19 @@ export function Modal({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-foreground hover:bg-soft-accent transition-colors shrink-0"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-foreground hover:bg-soft-accent transition-colors shrink-0 cursor-pointer"
             aria-label="Tutup"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="overflow-y-auto py-4 flex-1">{children}</div>
+        {/* Modal Body: Internal scrolling when content is long */}
+        <div className="overflow-y-auto py-3 sm:py-4 flex-1 overscroll-contain pr-1 -mr-1">
+          {children}
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
