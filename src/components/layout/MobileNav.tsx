@@ -26,7 +26,7 @@ export function MobileNav() {
 
   return (
     <nav className="lg:hidden fixed bottom-3 inset-x-3 z-40">
-      <div className="bg-surface/95 backdrop-blur-lg rounded-2xl border border-white/80 shadow-dropdown px-2 py-1.5 flex items-center justify-around">
+      <div className="bg-surface/95 dark:bg-surface/90 backdrop-blur-lg rounded-2xl border border-white/80 dark:border-border/80 shadow-dropdown px-2 py-1.5 flex items-center justify-around">
         {navItems.map((item) => {
           const isActive =
             pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));

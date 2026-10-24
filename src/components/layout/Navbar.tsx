@@ -36,7 +36,7 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-30 w-full pt-3 sm:pt-4 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-[1400px] mx-auto bg-surface/90 backdrop-blur-md rounded-2xl lg:rounded-full border border-white/70 shadow-card px-4 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between gap-4">
+      <div className="max-w-[1400px] mx-auto bg-surface/90 dark:bg-surface/85 backdrop-blur-md rounded-2xl lg:rounded-full border border-white/70 dark:border-border/80 shadow-card px-4 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between gap-4">
         {/* Brand / Logo */}
         <Link href="/dashboard" className="flex items-center gap-2.5 shrink-0 group">
           <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary to-primary-dark flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
@@ -48,7 +48,7 @@ export function Navbar() {
         </Link>
 
         {/* Desktop Navigation Links */}
-        <nav className="hidden lg:flex items-center gap-1 bg-[#F5F4FA] p-1 rounded-full border border-border/40">
+        <nav className="hidden lg:flex items-center gap-1 bg-[#F5F4FA] dark:bg-surface-muted/90 p-1 rounded-full border border-border/40 dark:border-border/70">
           {navItems.map((item) => {
             const isActive =
               pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
@@ -62,7 +62,7 @@ export function Navbar() {
                   "flex items-center gap-2 px-4 py-2 rounded-full text-sm transition-all duration-150 font-medium",
                   isActive
                     ? "bg-primary text-white shadow-sm font-semibold"
-                    : "text-muted hover:text-foreground hover:bg-white/80"
+                    : "text-muted hover:text-foreground hover:bg-white/80 dark:hover:bg-surface dark:hover:text-foreground"
                 )}
               >
                 <Icon className={cn("w-4 h-4", isActive ? "text-white" : "text-muted")} />
@@ -79,7 +79,7 @@ export function Navbar() {
             className="flex items-center rounded-full hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             aria-label="Profil dan Pengaturan Akun"
           >
-            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary/20 to-primary/40 border-2 border-white shadow-sm flex items-center justify-center text-primary font-bold text-sm">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary/20 to-primary/40 border-2 border-white dark:border-border shadow-sm flex items-center justify-center text-primary font-bold text-sm">
               {isProfilePending ? (
                 <span className="w-4 h-4 rounded-full bg-primary/30 animate-pulse" />
               ) : initial ? (

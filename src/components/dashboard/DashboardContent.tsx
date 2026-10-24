@@ -172,7 +172,7 @@ export function DashboardContent() {
         ? "bg-primary ring-2 ring-primary/30"
         : isPast
         ? "bg-muted/40"
-        : "bg-[#00D589]";
+        : "bg-success";
 
       return {
         id: a.id,
@@ -303,7 +303,7 @@ export function DashboardContent() {
             ========================================= */}
         <div className="lg:col-span-2 space-y-5">
           {/* Card 1A: Total Tasks Completed */}
-          <Card padding="md" hover className="flex flex-col justify-between min-h-[220px]">
+          <Card padding="md" hover className="flex flex-col justify-between min-h-[220px] bg-gradient-to-br from-surface to-soft-accent/30 dark:to-soft-accent/20 cursor-default">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-foreground tracking-tight">
                 Total Tasks Completed
@@ -318,21 +318,22 @@ export function DashboardContent() {
                   cx="40"
                   cy="40"
                   r={radius}
-                  stroke="#EFEFF8"
+                  stroke="currentColor"
                   strokeWidth="7"
                   fill="transparent"
+                  className="text-border dark:text-border"
                 />
                 <circle
                   cx="40"
                   cy="40"
                   r={radius}
-                  stroke="#7A7AFF"
+                  stroke="currentColor"
                   strokeWidth="7"
                   strokeDasharray={circumference}
                   strokeDashoffset={strokeDashoffset}
                   strokeLinecap="round"
                   fill="transparent"
-                  className="transition-all duration-700 ease-out"
+                  className="text-primary stroke-primary transition-all duration-700 ease-out"
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
@@ -350,7 +351,7 @@ export function DashboardContent() {
               <div className="flex items-center justify-between text-[11px] font-medium text-muted mb-1.5">
                 <span>Daily progress</span>
               </div>
-              <div className="w-full h-1.5 bg-[#EAEAF2] rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-border dark:bg-border rounded-full overflow-hidden">
                 <div
                   className="h-full bg-primary rounded-full transition-all duration-500"
                   style={{ width: `${taskProgressPercent}%` }}
@@ -360,7 +361,7 @@ export function DashboardContent() {
           </Card>
 
           {/* Card 1B: Total Notes */}
-          <Card padding="md" hover className="flex flex-col justify-between min-h-[160px]">
+          <Card padding="md" hover className="flex flex-col justify-between min-h-[160px] bg-gradient-to-br from-surface to-soft-accent/30 dark:to-soft-accent/20 cursor-default">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-foreground tracking-tight">
                 Total Notes
@@ -373,7 +374,7 @@ export function DashboardContent() {
                 <span className="text-3xl font-extrabold text-foreground tracking-tight">
                   {notes.length}
                 </span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#E6FAF3] text-[#00D589]">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-success-light text-success">
                   +{notes.length}
                 </span>
               </div>
@@ -395,13 +396,13 @@ export function DashboardContent() {
               href={nextUp.href}
               className="block group rounded-2xl lg:rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             >
-              <Card padding="md" hover className="relative overflow-hidden bg-gradient-to-r from-surface to-[#F7F6FF]">
+              <Card padding="md" hover className="relative overflow-hidden bg-gradient-to-r from-surface to-soft-accent/30 dark:to-soft-accent/20">
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-dark">
                     <Clock className="w-3.5 h-3.5 text-primary" />
                     <span>Next Up</span>
                   </div>
-                  <div className="w-7 h-7 rounded-full bg-white border border-border shadow-sm flex items-center justify-center text-muted-dark group-hover:text-primary group-hover:border-primary transition-colors">
+                  <div className="w-7 h-7 rounded-full bg-surface border border-border/80 shadow-sm flex items-center justify-center text-muted-dark group-hover:text-primary group-hover:border-primary transition-colors">
                     <ArrowUpRight className="w-3.5 h-3.5" />
                   </div>
                 </div>
@@ -430,7 +431,7 @@ export function DashboardContent() {
               </Card>
             </Link>
           ) : (
-            <Card padding="md" hover className="flex items-center justify-center py-6 text-center">
+            <Card padding="md" hover className="flex items-center justify-center py-6 text-center bg-gradient-to-br from-surface to-soft-accent/20 dark:to-soft-accent/15 cursor-default">
               <div>
                 <p className="text-sm font-semibold text-foreground">Semua aktivitas hari ini selesai!</p>
                 <p className="text-xs text-muted mt-1">Istirahat dan siapkan rencana esok hari.</p>
@@ -439,7 +440,7 @@ export function DashboardContent() {
           )}
 
           {/* Card 2B: Today's Schedule Timeline */}
-          <Card padding="md" hover className="space-y-4">
+          <Card padding="md" hover className="space-y-4 bg-gradient-to-br from-surface via-surface to-soft-accent/25 dark:to-soft-accent/15 cursor-default">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CalendarDays className="w-4 h-4 text-primary" />
@@ -481,7 +482,7 @@ export function DashboardContent() {
                     const dotColor = isOngoing
                       ? "bg-primary ring-2 ring-primary/30 animate-pulse"
                       : isUpcoming
-                      ? "bg-[#7A7AFF]"
+                      ? "bg-primary"
                       : "bg-muted/40";
 
                     return (
@@ -511,7 +512,7 @@ export function DashboardContent() {
                               </span>
                             )}
                             {!ongoingSched && s.id === nextUpcomingSched?.id && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#7A7AFF]/15 text-[#5151E5]">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-primary/15 text-primary">
                                 Berikutnya
                               </span>
                             )}
@@ -541,7 +542,7 @@ export function DashboardContent() {
             ========================================= */}
         <div className="lg:col-span-3 space-y-5">
           {/* Card 3A: Activity Timeline */}
-          <Card padding="md" hover className="space-y-3.5">
+          <Card padding="md" hover className="space-y-3.5 bg-gradient-to-br from-surface via-surface to-soft-accent/25 dark:to-soft-accent/15 cursor-default">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ActivityIcon className="w-4 h-4 text-primary" />
@@ -566,7 +567,7 @@ export function DashboardContent() {
                   <Link
                     key={act.id}
                     href={act.href}
-                    className="flex items-center justify-between p-2 rounded-xl hover:bg-surface-muted transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                    className="flex items-center justify-between p-2 rounded-xl hover:bg-surface-muted transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className={`w-2 h-2 rounded-full shrink-0 ${act.color}`} />
@@ -585,7 +586,7 @@ export function DashboardContent() {
           </Card>
 
           {/* Card 3B: Urgent Tasks */}
-          <Card padding="md" hover className="space-y-3.5">
+          <Card padding="md" hover className="space-y-3.5 bg-gradient-to-br from-surface via-surface to-soft-accent/25 dark:to-soft-accent/15 cursor-default">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CheckSquare className="w-4 h-4 text-primary" />
@@ -612,7 +613,7 @@ export function DashboardContent() {
                     <Link
                       key={t.id}
                       href="/tasks"
-                      className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-surface-muted transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-surface-muted transition-colors group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       {/* Checkbox button */}
                       <button
@@ -622,7 +623,7 @@ export function DashboardContent() {
                           e.stopPropagation();
                           toggleTask(t.id);
                         }}
-                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${
+                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                           t.status === "done"
                             ? "bg-primary border-primary text-white"
                             : overdue
@@ -649,7 +650,7 @@ export function DashboardContent() {
                             {PRIORITY_LABELS[t.priority]}
                           </Badge>
                         </div>
-                        <p className="text-[11px] text-muted mt-0.5">
+                        <p className={`text-[11px] mt-0.5 ${overdue && t.status !== "done" ? "text-danger font-medium" : "text-muted"}`}>
                           {t.due_at
                             ? overdue
                               ? "Terlambat"
@@ -709,7 +710,7 @@ export function DashboardContent() {
           </div>
 
           {/* Card 4B: Motivation & Quick Actions Panel */}
-          <Card padding="md" hover className="space-y-4">
+          <Card padding="md" hover className="space-y-4 bg-gradient-to-br from-surface via-surface to-soft-accent/30 dark:to-soft-accent/20 cursor-default">
             {/* Motivational message with Crescent Moon */}
             <div className="text-center py-2 px-1">
               <div className="w-10 h-10 mx-auto rounded-full bg-soft-accent flex items-center justify-center text-primary mb-2 shadow-sm">
@@ -739,18 +740,21 @@ export function DashboardContent() {
             <div className="space-y-1.5 border-t border-border/70 pt-3">
               <button
                 type="button"
-                className="w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold text-foreground hover:bg-soft-accent hover:text-primary transition-colors text-left"
+                onClick={() => toast.info("Fitur AI Assistant akan segera hadir.")}
+                className="w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold text-foreground hover:bg-soft-accent hover:text-primary transition-colors text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-3.5 h-3.5 text-primary" />
                   <span>AI Assistant</span>
                 </div>
-                <ChevronRight className="w-3.5 h-3.5 text-muted" />
+                <span className="text-[10px] font-semibold text-muted bg-surface-muted px-1.5 py-0.5 rounded-md border border-border/60">
+                  Segera
+                </span>
               </button>
 
               <Link
                 href="/tasks"
-                className="w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold text-foreground hover:bg-soft-accent hover:text-primary transition-colors"
+                className="w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold text-foreground hover:bg-soft-accent hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <div className="flex items-center gap-2">
                   <Plus className="w-3.5 h-3.5 text-primary" />
@@ -761,7 +765,7 @@ export function DashboardContent() {
 
               <Link
                 href="/notes"
-                className="w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold text-foreground hover:bg-soft-accent hover:text-primary transition-colors"
+                className="w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold text-foreground hover:bg-soft-accent hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <div className="flex items-center gap-2">
                   <StickyNote className="w-3.5 h-3.5 text-primary" />
@@ -772,7 +776,7 @@ export function DashboardContent() {
 
               <Link
                 href="/agenda"
-                className="w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold text-foreground hover:bg-soft-accent hover:text-primary transition-colors"
+                className="w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold text-foreground hover:bg-soft-accent hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <div className="flex items-center gap-2">
                   <CalendarClock className="w-3.5 h-3.5 text-primary" />
@@ -790,7 +794,7 @@ export function DashboardContent() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-start">
         
         {/* Card 5A: Upcoming Agenda (lg:col-span-7) */}
-        <Card padding="md" hover className="lg:col-span-7 space-y-4">
+        <Card padding="md" hover className="lg:col-span-7 space-y-4 bg-gradient-to-br from-surface via-surface to-soft-accent/25 dark:to-soft-accent/15 cursor-default">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <CalendarClock className="w-4 h-4 text-primary" />
@@ -812,19 +816,23 @@ export function DashboardContent() {
                 Upcoming
               </p>
               <div className="space-y-2.5">
-                {upcomingEvents.map((a) => (
-                  <div key={a.id} className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-surface-muted transition-colors">
-                    <div className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-foreground truncate">
-                        {a.title}
-                      </p>
-                      <p className="text-[11px] text-muted mt-0.5">
-                        {format(toJakartaDate(a.start_at), "HH.mm", { locale: localeId })} - {a.end_at ? format(toJakartaDate(a.end_at), "HH.mm") : "Selesai"} · {a.location || "Kampus"}
-                      </p>
+                {upcomingEvents.length === 0 ? (
+                  <p className="text-xs text-muted py-3">Belum ada agenda mendatang.</p>
+                ) : (
+                  upcomingEvents.map((a) => (
+                    <div key={a.id} className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-surface-muted transition-colors">
+                      <div className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-foreground truncate">
+                          {a.title}
+                        </p>
+                        <p className="text-[11px] text-muted mt-0.5">
+                          {format(toJakartaDate(a.start_at), "HH.mm", { locale: localeId })} - {a.end_at ? format(toJakartaDate(a.end_at), "HH.mm") : "Selesai"} · {a.location || "Kampus"}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
 
@@ -842,7 +850,7 @@ export function DashboardContent() {
                       key={item.id}
                       className="flex items-start gap-2.5 p-2 rounded-xl opacity-75 hover:opacity-100 transition-opacity"
                     >
-                      <div className="w-3.5 h-3.5 rounded-full bg-[#EAEAF2] flex items-center justify-center text-muted mt-0.5 shrink-0">
+                      <div className="w-3.5 h-3.5 rounded-full bg-surface-muted border border-border/80 flex items-center justify-center text-muted mt-0.5 shrink-0">
                         <Check className="w-2.5 h-2.5 stroke-[2.5]" />
                       </div>
                       <div className="min-w-0">
@@ -865,7 +873,7 @@ export function DashboardContent() {
         </Card>
 
         {/* Card 5B: Recent Notes (lg:col-span-5) */}
-        <Card padding="md" hover className="lg:col-span-5 space-y-4">
+        <Card padding="md" hover className="lg:col-span-5 space-y-4 bg-gradient-to-br from-surface via-surface to-soft-accent/25 dark:to-soft-accent/15 cursor-default">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <StickyNote className="w-4 h-4 text-primary" />
@@ -898,8 +906,8 @@ export function DashboardContent() {
                         n.category === "Kuliah"
                           ? "bg-primary"
                           : n.category === "Karir"
-                          ? "bg-[#00D589]"
-                          : "bg-[#FFAB2E]"
+                          ? "bg-success"
+                          : "bg-warning"
                       }`}
                     />
                     <div className="min-w-0 flex-1">
@@ -925,7 +933,7 @@ export function DashboardContent() {
                         toast.error(msg);
                       }
                     }}
-                    className="p-1 rounded-md hover:bg-soft-accent cursor-pointer shrink-0 ml-2"
+                    className="p-1 rounded-md hover:bg-soft-accent cursor-pointer shrink-0 ml-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     aria-label={n.is_favorite ? "Hapus dari favorit" : "Tambah ke favorit"}
                   >
                     <Star

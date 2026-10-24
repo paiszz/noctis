@@ -57,21 +57,24 @@
   background-color: #0F0F19;
   background-image:
     radial-gradient(
-      ellipse 85% 480px at 50% -20px,
-      rgba(122, 122, 255, 0.18) 0%,
-      rgba(99, 102, 241, 0.08) 45%,
+      ellipse 100% 800px at 50% -40px,
+      rgba(122, 122, 255, 0.16) 0%,
+      rgba(99, 102, 241, 0.07) 40%,
+      rgba(99, 102, 241, 0.02) 75%,
       transparent 100%
     ),
     radial-gradient(
-      ellipse 55% 420px at 85% -10px,
-      rgba(135, 120, 255, 0.12) 0%,
+      ellipse 75% 700px at 85% -30px,
+      rgba(135, 120, 255, 0.10) 0%,
+      rgba(135, 120, 255, 0.03) 50%,
       transparent 100%
     ),
     linear-gradient(
       180deg,
       #18182A 0px,
-      #131320 200px,
-      #0F0F19 500px
+      #141424 280px,
+      #11111E 560px,
+      #0F0F19 900px
     );
   color: var(--noctis-text);
 }
@@ -123,29 +126,31 @@
 body {
   background-color: #FFFFFF;
   background-image:
-    /* Layer 1: Ambient top-center radial light glow */
+    /* Layer 1: Ambient top-center radial light glow with gentle falloff */
     radial-gradient(
-      ellipse 85% 480px at 50% -20px,
-      rgba(122, 122, 255, 0.32) 0%,
-      rgba(155, 145, 255, 0.18) 45%,
-      rgba(215, 210, 255, 0.06) 75%,
+      ellipse 100% 800px at 50% -40px,
+      rgba(122, 122, 255, 0.24) 0%,
+      rgba(155, 145, 255, 0.13) 35%,
+      rgba(195, 185, 255, 0.05) 65%,
+      rgba(225, 220, 255, 0.02) 85%,
       transparent 100%
     ),
     /* Layer 2: Soft top-right violet accent glow */
     radial-gradient(
-      ellipse 55% 420px at 85% -10px,
-      rgba(135, 120, 255, 0.22) 0%,
-      rgba(185, 175, 255, 0.08) 50%,
+      ellipse 75% 700px at 85% -30px,
+      rgba(135, 120, 255, 0.16) 0%,
+      rgba(165, 150, 255, 0.08) 40%,
+      rgba(205, 195, 255, 0.02) 75%,
       transparent 100%
     ),
     /* Layer 3: Linear transition from soft lavender down to seamless pure white */
     linear-gradient(
       180deg,
-      #E1DBFF 0px,
-      #ECE7FE 140px,
-      #F4F0FE 340px,
-      #F9F8FE 580px,
-      #FFFFFF 880px
+      #E6E0FF 0px,
+      #EDE8FE 180px,
+      #F4F1FE 420px,
+      #F9F8FE 720px,
+      #FFFFFF 1100px
     );
   background-repeat: no-repeat;
   color: var(--noctis-text);
