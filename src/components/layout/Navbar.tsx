@@ -9,8 +9,6 @@ import {
   StickyNote,
   CalendarClock,
   Settings,
-  Search,
-  Bell,
   Moon,
   User,
 } from "lucide-react";
@@ -74,28 +72,12 @@ export function Navbar() {
           })}
         </nav>
 
-        {/* Right Actions: Search, Notifications, Profile */}
+        {/* Right Actions: Profile */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-          <button
-            type="button"
-            className="w-9 h-9 rounded-full flex items-center justify-center text-muted hover:text-foreground hover:bg-soft-accent transition-colors"
-            aria-label="Cari"
-          >
-            <Search className="w-4 h-4" />
-          </button>
-
-          <button
-            type="button"
-            className="w-9 h-9 rounded-full flex items-center justify-center text-muted hover:text-foreground hover:bg-soft-accent relative transition-colors"
-            aria-label="Notifikasi"
-          >
-            <Bell className="w-4 h-4" />
-            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-primary ring-2 ring-white" />
-          </button>
-
           <Link
             href="/settings"
-            className="flex items-center gap-2 pl-1 sm:pl-2 border-l border-border/70 hover:opacity-90 transition-opacity"
+            className="flex items-center rounded-full hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            aria-label="Profil dan Pengaturan Akun"
           >
             <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary/20 to-primary/40 border-2 border-white shadow-sm flex items-center justify-center text-primary font-bold text-sm">
               {isProfilePending ? (
