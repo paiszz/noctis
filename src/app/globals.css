@@ -63,6 +63,7 @@ html {
 
 .dark body {
   background-color: #0F0F19;
+  background-attachment: scroll;
   background-image:
     radial-gradient(
       ellipse 100% 800px at 50% -40px,
@@ -133,6 +134,7 @@ html {
 
 body {
   background-color: #FFFFFF;
+  background-attachment: fixed;
   background-image:
     /* Layer 1: Ambient top-center radial light glow with gentle falloff */
     radial-gradient(
@@ -154,11 +156,11 @@ body {
     /* Layer 3: Linear transition from soft lavender down to seamless pure white */
     linear-gradient(
       180deg,
-      #E6E0FF 0px,
-      #EDE8FE 180px,
-      #F4F1FE 420px,
-      #F9F8FE 720px,
-      #FFFFFF 1100px
+      #E6E0FF 0%,
+      #EDE8FE 25%,
+      #F4F1FE 55%,
+      #F9F8FE 80%,
+      #FFFFFF 100%
     );
   background-repeat: no-repeat;
   color: var(--noctis-text);
