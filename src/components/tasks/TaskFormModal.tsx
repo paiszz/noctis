@@ -1,11 +1,26 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Modal, Button } from "@/components/ui";
+import { Modal, Button, Select, DateTimePicker } from "@/components/ui";
+import type { SelectOption } from "@/components/ui";
 import { useData } from "@/lib/data-context";
 import { PRIORITY_LABELS, STATUS_LABELS } from "@/types";
 import type { Task, TaskPriority, TaskStatus } from "@/types";
 import { toast } from "sonner";
+
+const PRIORITY_OPTIONS: SelectOption<TaskPriority>[] = (
+  Object.keys(PRIORITY_LABELS) as TaskPriority[]
+).map((p) => ({
+  value: p,
+  label: PRIORITY_LABELS[p],
+}));
+
+const STATUS_OPTIONS: SelectOption<TaskStatus>[] = (
+  Object.keys(STATUS_LABELS) as TaskStatus[]
+).map((s) => ({
+  value: s,
+  label: STATUS_LABELS[s],
+}));
 
 interface TaskFormModalProps {
   isOpen: boolean;
@@ -19,6 +34,14 @@ export function TaskFormModal({
   taskToEdit,
 }: TaskFormModalProps) {
   const { addTask, updateTask, schedules } = useData();
+
+  const courseOptions: SelectOption<string>[] = [
+    { value: "", label: "-- Tidak terkait matkul --" },
+    ...schedules.map((s) => ({
+      value: s.id,
+      label: `${s.course_name}${s.course_code ? ` (${s.course_code})` : ""}`,
+    })),
+  ];
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -178,12 +201,16 @@ export function TaskFormModal({
             >
               Tenggat Waktu (Deadline)
             </label>
-            <input
+            <DateTimePicker
               id="task-due"
-              type="datetime-local"
+              name="due_at"
               value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus hover:border-primary/40 transition-colors [color-scheme:light] dark:[color-scheme:dark]"
+              onChange={(val) => setDueDate(val)}
+              variant="muted"
+              className="w-full"
+              placeholder="Pilih tanggal & waktu..."
+              ariaLabel="Tenggat Waktu (Deadline)"
+              clearable={true}
             />
           </div>
 
@@ -195,18 +222,14 @@ export function TaskFormModal({
             >
               Prioritas
             </label>
-            <select
+            <Select
               id="task-priority"
               value={priority}
-              onChange={(e) => setPriority(e.target.value as TaskPriority)}
-              className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus hover:border-primary/40 transition-colors cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
-            >
-              {(Object.keys(PRIORITY_LABELS) as TaskPriority[]).map((p) => (
-                <option key={p} value={p} className="bg-surface text-foreground">
-                  {PRIORITY_LABELS[p]}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setPriority(val)}
+              options={PRIORITY_OPTIONS}
+              variant="muted"
+              className="w-full"
+            />
           </div>
         </div>
 
@@ -220,18 +243,14 @@ export function TaskFormModal({
             >
               Status
             </label>
-            <select
+            <Select
               id="task-status"
               value={status}
-              onChange={(e) => setStatus(e.target.value as TaskStatus)}
-              className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus hover:border-primary/40 transition-colors cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
-            >
-              {(Object.keys(STATUS_LABELS) as TaskStatus[]).map((s) => (
-                <option key={s} value={s} className="bg-surface text-foreground">
-                  {STATUS_LABELS[s]}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setStatus(val)}
+              options={STATUS_OPTIONS}
+              variant="muted"
+              className="w-full"
+            />
           </div>
 
           {/* Course relation */}
@@ -242,21 +261,14 @@ export function TaskFormModal({
             >
               Mata Kuliah (opsional)
             </label>
-            <select
+            <Select
               id="task-course"
               value={courseScheduleId}
-              onChange={(e) => setCourseScheduleId(e.target.value)}
-              className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus hover:border-primary/40 transition-colors cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
-            >
-              <option value="" className="bg-surface text-foreground">
-                -- Tidak terkait matkul --
-              </option>
-              {schedules.map((s) => (
-                <option key={s.id} value={s.id} className="bg-surface text-foreground">
-                  {s.course_name} {s.course_code ? `(${s.course_code})` : ""}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setCourseScheduleId(val)}
+              options={courseOptions}
+              variant="muted"
+              className="w-full"
+            />
           </div>
         </div>
 

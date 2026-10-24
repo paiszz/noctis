@@ -20,7 +20,8 @@ import {
   Loader2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Card, CardHeader, Button, Badge, Modal } from "@/components/ui";
+import { Card, CardHeader, Button, Badge, Modal, Select } from "@/components/ui";
+import type { SelectOption } from "@/components/ui";
 import { useData } from "@/lib/data-context";
 import { useAuth } from "@/lib/auth-context";
 import { noctisExportSchema } from "@/lib/validation/import-schema";
@@ -29,7 +30,7 @@ import type { AppTheme } from "@/types";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
-const TIMEZONE_OPTIONS = [
+const TIMEZONE_OPTIONS: SelectOption<string>[] = [
   { value: "Asia/Jakarta", label: "Asia/Jakarta (WIB, UTC+7)" },
   { value: "Asia/Makassar", label: "Asia/Makassar (WITA, UTC+8)" },
   { value: "Asia/Jayapura", label: "Asia/Jayapura (WIT, UTC+9)" },
@@ -513,10 +514,9 @@ export function SettingsView() {
               </div>
             </div>
 
-            <select
+            <Select
               value={currentTimezone}
-              onChange={async (e) => {
-                const tz = e.target.value;
+              onChange={async (tz) => {
                 const prevTz = currentTimezone;
                 setCurrentTimezone(tz);
                 try {
@@ -529,15 +529,11 @@ export function SettingsView() {
                   toast.error(`Gagal mengubah zona waktu: ${msg}`);
                 }
               }}
-              className="bg-surface border border-border/80 text-foreground text-xs sm:text-sm rounded-xl px-3.5 py-2 pr-8 shadow-sm hover:border-primary/40 focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus transition-colors cursor-pointer shrink-0 [color-scheme:light] dark:[color-scheme:dark]"
+              options={TIMEZONE_OPTIONS}
               aria-label="Pilih zona waktu"
-            >
-              {TIMEZONE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value} className="bg-surface text-foreground">
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+              align="right"
+              className="shrink-0"
+            />
           </div>
         </div>
       </Card>

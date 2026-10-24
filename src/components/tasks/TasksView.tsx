@@ -14,7 +14,8 @@ import {
   BookOpen,
   Filter,
 } from "lucide-react";
-import { Card, Badge, Button, EmptyState, Modal, priorityVariant } from "@/components/ui";
+import { Card, Badge, Button, EmptyState, Modal, priorityVariant, Select } from "@/components/ui";
+import type { SelectOption } from "@/components/ui";
 import { useData } from "@/lib/data-context";
 import { toJakartaDate } from "@/lib/date";
 import {
@@ -28,6 +29,13 @@ import { toast } from "sonner";
 
 type FilterStatus = TaskStatus | "all" | "overdue";
 type FilterPriority = TaskPriority | "all";
+
+const PRIORITY_OPTIONS: SelectOption<FilterPriority>[] = [
+  { value: "all", label: "Semua Prioritas" },
+  { value: "high", label: "Prioritas Tinggi" },
+  { value: "medium", label: "Prioritas Sedang" },
+  { value: "low", label: "Prioritas Rendah" },
+];
 
 const STATUS_FILTERS: { value: FilterStatus; label: string }[] = [
   { value: "all", label: "Semua" },
@@ -210,19 +218,13 @@ export function TasksView() {
 
         {/* Priority Filter */}
         <div className="flex items-center gap-2 shrink-0">
-          <div className="relative">
-            <select
-              value={filterPriority}
-              onChange={(e) => setFilterPriority(e.target.value as FilterPriority)}
-              className="bg-surface border border-border/80 text-foreground text-xs sm:text-sm rounded-xl px-3.5 py-2 pr-8 shadow-sm hover:border-primary/40 focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus transition-colors cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
-              aria-label="Filter berdasarkan prioritas"
-            >
-              <option value="all" className="bg-surface text-foreground">Semua Prioritas</option>
-              <option value="high" className="bg-surface text-foreground">Prioritas Tinggi</option>
-              <option value="medium" className="bg-surface text-foreground">Prioritas Sedang</option>
-              <option value="low" className="bg-surface text-foreground">Prioritas Rendah</option>
-            </select>
-          </div>
+          <Select
+            value={filterPriority}
+            onChange={(val) => setFilterPriority(val)}
+            options={PRIORITY_OPTIONS}
+            aria-label="Filter berdasarkan prioritas"
+            align="right"
+          />
         </div>
       </div>
 

@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Modal, Button } from "@/components/ui";
+import { Modal, Button, Select, TimePicker } from "@/components/ui";
+import type { SelectOption } from "@/components/ui";
 import { useData } from "@/lib/data-context";
 import { DAY_LABELS } from "@/types";
 import type { CourseSchedule, DayOfWeek } from "@/types";
@@ -17,6 +18,11 @@ interface ScheduleFormModalProps {
 }
 
 const DAYS: DayOfWeek[] = [1, 2, 3, 4, 5, 6, 0]; // Senin to Minggu
+
+const DAY_OPTIONS: SelectOption<DayOfWeek>[] = DAYS.map((d) => ({
+  value: d,
+  label: DAY_LABELS[d],
+}));
 
 export function ScheduleFormModal({
   isOpen,
@@ -179,18 +185,14 @@ export function ScheduleFormModal({
             >
               Hari Kuliah <span className="text-danger">*</span>
             </label>
-            <select
+            <Select<DayOfWeek>
               id="sched-day"
               value={dayOfWeek}
-              onChange={(e) => setDayOfWeek(Number(e.target.value) as DayOfWeek)}
-              className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus hover:border-primary/40 transition-colors cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
-            >
-              {DAYS.map((d) => (
-                <option key={d} value={d} className="bg-surface text-foreground">
-                  {DAY_LABELS[d]}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setDayOfWeek(Number(val) as DayOfWeek)}
+              options={DAY_OPTIONS}
+              variant="muted"
+              className="w-full"
+            />
           </div>
         </div>
 
@@ -204,16 +206,17 @@ export function ScheduleFormModal({
               >
                 Jam Mulai <span className="text-danger">*</span>
               </label>
-              <input
+              <TimePicker
                 id="sched-start"
-                type="time"
-                required
+                name="start_time"
                 value={startTime}
-                onChange={(e) => {
-                  setStartTime(e.target.value);
+                onChange={(val) => {
+                  setStartTime(val);
                   if (errors.time) setErrors((prev) => ({ ...prev, time: undefined }));
                 }}
-                className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus hover:border-primary/40 transition-colors [color-scheme:light] dark:[color-scheme:dark]"
+                variant="muted"
+                className="w-full"
+                ariaLabel="Jam Mulai"
               />
             </div>
 
@@ -224,16 +227,18 @@ export function ScheduleFormModal({
               >
                 Jam Selesai <span className="text-danger">*</span>
               </label>
-              <input
+              <TimePicker
                 id="sched-end"
-                type="time"
-                required
+                name="end_time"
                 value={endTime}
-                onChange={(e) => {
-                  setEndTime(e.target.value);
+                onChange={(val) => {
+                  setEndTime(val);
                   if (errors.time) setErrors((prev) => ({ ...prev, time: undefined }));
                 }}
-                className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus hover:border-primary/40 transition-colors [color-scheme:light] dark:[color-scheme:dark]"
+                variant="muted"
+                align="right"
+                className="w-full"
+                ariaLabel="Jam Selesai"
               />
             </div>
           </div>
