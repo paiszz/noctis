@@ -14,6 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Card, Badge, Button, EmptyState, Modal } from "@/components/ui";
+import { cn } from "@/lib/utils";
 import { useData } from "@/lib/data-context";
 import { toJakartaDate } from "@/lib/date";
 import { DAY_LABELS } from "@/types";
@@ -30,6 +31,131 @@ const TOTAL_HEIGHT = (END_HOUR - START_HOUR) * HOUR_HEIGHT;
 function parseTimeToMinutes(timeStr: string): number {
   const [h, m] = timeStr.split(":").map(Number);
   return (h || 0) * 60 + (m || 0);
+}
+
+export interface PositionedSchedule {
+  schedule: CourseSchedule;
+  top: number;
+  height: number;
+  colIndex: number;
+  colSpan: number;
+  totalColumns: number;
+}
+
+/**
+ * Calculates horizontal overlap positioning (columns and spans) for schedule blocks on the weekly grid.
+ * Schedules that do not overlap or only touch at boundaries take 100% full width.
+ * Schedules that overlap in time are arranged side-by-side without covering each other.
+ */
+export function computeScheduleLayout(daySchedules: CourseSchedule[]): PositionedSchedule[] {
+  if (daySchedules.length === 0) return [];
+
+  const baseMin = START_HOUR * 60;
+
+  // 1. Map to items with parsed minutes, top, and height
+  const items = daySchedules.map((schedule) => {
+    const startMin = parseTimeToMinutes(schedule.start_time);
+    const endMin = parseTimeToMinutes(schedule.end_time);
+    const top = Math.max(0, ((startMin - baseMin) / 60) * HOUR_HEIGHT);
+    const durationMin = Math.max(endMin - startMin, 30);
+    const height = Math.max(26, (durationMin / 60) * HOUR_HEIGHT - 2);
+
+    return {
+      schedule,
+      startMin,
+      endMin,
+      top,
+      height,
+      colIndex: 0,
+      colSpan: 1,
+      totalColumns: 1,
+    };
+  });
+
+  // 2. Sort by startMin ascending, then endMin descending (longer events placed first)
+  items.sort((a, b) => {
+    if (a.startMin !== b.startMin) {
+      return a.startMin - b.startMin;
+    }
+    if (a.endMin !== b.endMin) {
+      return b.endMin - a.endMin;
+    }
+    return a.schedule.id.localeCompare(b.schedule.id);
+  });
+
+  // 3. Group into clusters of overlapping events
+  const clusters: typeof items[] = [];
+  let currentCluster: typeof items = [];
+  let clusterEnd = -1;
+
+  for (const item of items) {
+    if (currentCluster.length === 0) {
+      currentCluster.push(item);
+      clusterEnd = item.endMin;
+    } else if (item.startMin < clusterEnd) {
+      // Overlaps with the current cluster
+      currentCluster.push(item);
+      clusterEnd = Math.max(clusterEnd, item.endMin);
+    } else {
+      // Boundary-touching (startMin >= clusterEnd) or disjoint -> start new cluster
+      clusters.push(currentCluster);
+      currentCluster = [item];
+      clusterEnd = item.endMin;
+    }
+  }
+  if (currentCluster.length > 0) {
+    clusters.push(currentCluster);
+  }
+
+  // 4. Assign columns and calculate spans within each cluster
+  for (const cluster of clusters) {
+    if (cluster.length === 1) {
+      cluster[0].colIndex = 0;
+      cluster[0].colSpan = 1;
+      cluster[0].totalColumns = 1;
+      continue;
+    }
+
+    const columns: typeof items[] = [];
+
+    for (const item of cluster) {
+      let placed = false;
+      for (let c = 0; c < columns.length; c++) {
+        const colEvents = columns[c];
+        const lastEvent = colEvents[colEvents.length - 1];
+        if (item.startMin >= lastEvent.endMin) {
+          colEvents.push(item);
+          item.colIndex = c;
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        item.colIndex = columns.length;
+        columns.push([item]);
+      }
+    }
+
+    const totalColumns = columns.length;
+
+    for (const item of cluster) {
+      item.totalColumns = totalColumns;
+      let span = 1;
+      for (let c = item.colIndex + 1; c < totalColumns; c++) {
+        const hasOverlap = columns[c].some(
+          (other) => item.startMin < other.endMin && other.startMin < item.endMin
+        );
+        if (!hasOverlap) {
+          span++;
+        } else {
+          break;
+        }
+      }
+      item.colSpan = span;
+    }
+  }
+
+  return items;
 }
 
 export function CalendarView() {
@@ -247,26 +373,50 @@ export function CalendarView() {
                       />
                     ))}
 
-                    {/* Proportional Schedule Blocks */}
-                    {daySchedules.map((s) => {
-                      const startMin = parseTimeToMinutes(s.start_time);
-                      const endMin = parseTimeToMinutes(s.end_time);
-                      const baseMin = START_HOUR * 60;
+                    {/* Proportional Schedule Blocks with Overlap Handling */}
+                    {computeScheduleLayout(daySchedules).map((item) => {
+                      const { schedule: s, top, height, colIndex, colSpan, totalColumns } = item;
 
-                      const top = Math.max(0, ((startMin - baseMin) / 60) * HOUR_HEIGHT);
-                      const durationMin = Math.max(endMin - startMin, 30);
-                      const height = Math.max(26, (durationMin / 60) * HOUR_HEIGHT - 2);
+                      const leftPercent = (colIndex / totalColumns) * 100;
+                      const widthPercent = (colSpan / totalColumns) * 100;
 
                       return (
                         <div
                           key={s.id}
+                          role="button"
+                          tabIndex={0}
                           onClick={() => handleOpenEdit(s)}
-                          style={{
-                            top: `${top}px`,
-                            height: `${height}px`,
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              handleOpenEdit(s);
+                            }
                           }}
-                          className="absolute inset-x-1 bg-gradient-to-br from-primary/15 to-primary/25 border-l-3 border-primary rounded-lg px-2 py-1 overflow-hidden z-10 cursor-pointer shadow-sm hover:shadow-md hover:scale-[1.02] transition-all group"
-                          title={`${s.course_name} (${s.start_time}–${s.end_time})\nKlik untuk edit atau hapus`}
+                          style={
+                            totalColumns === 1
+                              ? {
+                                  top: `${top}px`,
+                                  height: `${height}px`,
+                                  left: "4px",
+                                  width: "calc(100% - 8px)",
+                                }
+                              : {
+                                  top: `${top}px`,
+                                  height: `${height}px`,
+                                  left: `calc(${leftPercent}% + 2px)`,
+                                  width: `calc(${widthPercent}% - 4px)`,
+                                }
+                          }
+                          className={cn(
+                            "absolute bg-gradient-to-br from-primary/15 to-primary/25 border-l-3 border-primary rounded-lg py-1 overflow-hidden z-10 cursor-pointer shadow-sm hover:shadow-md hover:scale-[1.02] hover:z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:z-20 transition-all group",
+                            totalColumns > 1 ? "px-1.5" : "px-2"
+                          )}
+                          title={`${s.course_name} (${s.start_time}–${s.end_time})${
+                            s.location ? ` • ${s.location}` : ""
+                          }\nKlik untuk edit atau hapus`}
+                          aria-label={`${s.course_name}, ${s.start_time} sampai ${s.end_time}${
+                            s.location ? `, di ${s.location}` : ""
+                          }`}
                         >
                           <div className="flex items-start justify-between gap-1">
                             <p className="text-xs font-bold text-primary truncate leading-tight group-hover:text-primary-dark">
