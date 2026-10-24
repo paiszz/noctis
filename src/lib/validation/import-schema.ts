@@ -42,17 +42,22 @@ export const noteImportSchema = z.object({
   content: z.string(),
   category: optionalString,
   tags: z
-    .array(z.string())
-    .nullable()
+    .unknown()
     .optional()
-    .transform((v) => (v !== null && v !== undefined ? v : undefined)),
+    .transform((v) => {
+      if (Array.isArray(v)) {
+        const strItems = v.filter((item): item is string => typeof item === "string");
+        return strItems.length > 0 ? strItems : undefined;
+      }
+      return undefined;
+    }),
   is_favorite: z.boolean().default(false),
   created_at: optionalDateString.default(() => new Date().toISOString()),
   updated_at: optionalDateString.default(() => new Date().toISOString()),
 });
 
 export const scheduleImportSchema = z.object({
-  id: z.string(),
+  id: z.string().min(1, "ID jadwal kuliah tidak boleh kosong"),
   user_id: z.string().optional().default("user-default"),
   course_name: z.string().min(1, "Nama mata kuliah tidak boleh kosong"),
   course_code: optionalString,
@@ -93,29 +98,42 @@ export const scheduleImportSchema = z.object({
   end_date: optionalString,
   created_at: optionalDateString.default(() => new Date().toISOString()),
   updated_at: optionalDateString.default(() => new Date().toISOString()),
+}).refine((data) => data.start_time < data.end_time, {
+  message: "Waktu mulai jadwal kuliah harus lebih awal dari waktu selesai",
+  path: ["end_time"],
 });
 
-export const agendaImportSchema = z.object({
-  id: z.string(),
-  user_id: z.string().optional().default("user-default"),
-  title: z.string().min(1, "Judul agenda tidak boleh kosong"),
-  description: optionalString,
-  start_at: z
-    .string()
-    .min(1, "Waktu mulai agenda tidak boleh kosong")
-    .refine((val) => !isNaN(Date.parse(val)), {
-      message: "Format waktu mulai agenda (start_at) tidak valid",
-    }),
-  end_at: optionalDateString,
-  location: optionalString,
-  reminder_minutes: z
-    .number()
-    .nullable()
-    .optional()
-    .transform((v) => (v !== null && v !== undefined ? v : undefined)),
-  created_at: optionalDateString.default(() => new Date().toISOString()),
-  updated_at: optionalDateString.default(() => new Date().toISOString()),
-});
+export const agendaImportSchema = z
+  .object({
+    id: z.string(),
+    user_id: z.string().optional().default("user-default"),
+    title: z.string().min(1, "Judul agenda tidak boleh kosong"),
+    description: optionalString,
+    start_at: z
+      .string()
+      .min(1, "Waktu mulai agenda tidak boleh kosong")
+      .refine((val) => !isNaN(Date.parse(val)), {
+        message: "Format waktu mulai agenda (start_at) tidak valid",
+      }),
+    end_at: optionalDateString,
+    location: optionalString,
+    reminder_minutes: z
+      .number()
+      .nullable()
+      .optional()
+      .transform((v) => (v !== null && v !== undefined ? v : undefined)),
+    created_at: optionalDateString.default(() => new Date().toISOString()),
+    updated_at: optionalDateString.default(() => new Date().toISOString()),
+  })
+  .refine(
+    (data) =>
+      !data.end_at ||
+      new Date(data.end_at).getTime() >= new Date(data.start_at).getTime(),
+    {
+      message: "Waktu selesai agenda harus sama atau setelah waktu mulai",
+      path: ["end_at"],
+    }
+  );
 
 export const noctisExportSchema = z.object({
   version: z.string(),
@@ -164,10 +182,42 @@ export const noctisExportSchema = z.object({
     .optional()
     .transform((v) => (v !== null && v !== undefined ? v : undefined)),
   data: z.object({
-    tasks: z.array(taskImportSchema).default([]),
-    notes: z.array(noteImportSchema).default([]),
-    schedules: z.array(scheduleImportSchema).default([]),
-    agendaEvents: z.array(agendaImportSchema).default([]),
+    tasks: z
+      .array(taskImportSchema)
+      .nullable()
+      .optional()
+      .transform((v) => (v !== null && v !== undefined ? v : undefined)),
+    notes: z
+      .array(noteImportSchema)
+      .nullable()
+      .optional()
+      .transform((v) => (v !== null && v !== undefined ? v : undefined)),
+    schedules: z
+      .array(scheduleImportSchema)
+      .refine(
+        (items) => {
+          const seen = new Set<string>();
+          for (const s of items) {
+            if (seen.has(s.id)) return false;
+            seen.add(s.id);
+          }
+          return true;
+        },
+        { message: "Terdapat duplikasi ID jadwal kuliah pada file cadangan" }
+      )
+      .nullable()
+      .optional()
+      .transform((v) => (v !== null && v !== undefined ? v : undefined)),
+    agendaEvents: z
+      .array(agendaImportSchema)
+      .nullable()
+      .optional()
+      .transform((v) => (v !== null && v !== undefined ? v : undefined)),
+    agenda_events: z
+      .array(agendaImportSchema)
+      .nullable()
+      .optional()
+      .transform((v) => (v !== null && v !== undefined ? v : undefined)),
   }),
 });
 
