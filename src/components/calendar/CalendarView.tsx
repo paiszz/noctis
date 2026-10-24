@@ -242,11 +242,11 @@ export function CalendarView() {
     <div className="max-w-6xl mx-auto space-y-4">
       {/* Controls Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between sm:justify-start gap-1 sm:gap-2 w-full sm:w-auto">
           <Button variant="ghost" size="sm" onClick={goBack} aria-label="Sebelumnya">
             <ChevronLeft className="w-4 h-4" />
           </Button>
-          <h1 className="text-base sm:text-lg font-bold text-foreground min-w-[200px] text-center">
+          <h1 className="text-sm sm:text-base md:text-lg font-bold text-foreground flex-1 sm:min-w-[200px] text-center">
             {view === "week"
               ? `${format(weekStart, "dd MMM", { locale: localeId })} — ${format(
                   addDays(weekStart, 6),
@@ -260,7 +260,7 @@ export function CalendarView() {
           </Button>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center justify-between sm:justify-end gap-2 flex-wrap w-full sm:w-auto">
           <Button variant="outline" size="sm" onClick={goToday}>
             Hari Ini
           </Button>
@@ -268,22 +268,24 @@ export function CalendarView() {
             <button
               type="button"
               onClick={() => setView("day")}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
+              className={cn(
+                "px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                 view === "day"
                   ? "bg-primary text-white shadow-sm font-bold"
                   : "text-muted hover:text-foreground"
-              }`}
+              )}
             >
               Hari
             </button>
             <button
               type="button"
               onClick={() => setView("week")}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
+              className={cn(
+                "px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                 view === "week"
                   ? "bg-primary text-white shadow-sm font-bold"
                   : "text-muted hover:text-foreground"
-              }`}
+              )}
             >
               Minggu
             </button>
@@ -300,39 +302,44 @@ export function CalendarView() {
 
       {/* Week View */}
       {view === "week" && (
-        <Card padding="sm" className="overflow-x-auto shadow-card">
-          <div className="min-w-[760px]">
-            {/* Day headers */}
-            <div className="grid grid-cols-[64px_repeat(7,1fr)] border-b border-border/80">
-              <div className="py-2.5 text-center text-xs font-semibold text-muted">
-                Waktu
-              </div>
-              {weekDays.map((day, i) => {
-                const isToday =
-                  format(day, "yyyy-MM-dd") === format(today, "yyyy-MM-dd");
-                return (
-                  <div
-                    key={i}
-                    className={`text-center py-2.5 text-xs border-l border-border/60 ${
-                      isToday ? "bg-soft-accent/60" : ""
-                    }`}
-                  >
-                    <p className="text-muted-dark font-medium">
-                      {format(day, "EEE", { locale: localeId })}
-                    </p>
-                    <p
-                      className={`font-bold mt-0.5 ${
-                        isToday
-                          ? "w-6 h-6 rounded-full bg-primary text-white mx-auto flex items-center justify-center text-xs"
-                          : "text-foreground"
-                      }`}
+        <Card padding="none" className="shadow-card overflow-hidden">
+          <div className="overflow-x-auto p-2 sm:p-4">
+            <div className="min-w-[760px]">
+              {/* Day headers */}
+              <div className="grid grid-cols-[64px_repeat(7,1fr)] border-b border-border/80">
+                <div className="py-2.5 text-center text-xs font-semibold text-muted-dark">
+                  Waktu
+                </div>
+                {weekDays.map((day, i) => {
+                  const isToday =
+                    format(day, "yyyy-MM-dd") === format(today, "yyyy-MM-dd");
+                  return (
+                    <div
+                      key={i}
+                      className={cn(
+                        "text-center py-2.5 text-xs border-l border-border/60 transition-colors",
+                        isToday && "bg-soft-accent/60"
+                      )}
                     >
-                      {format(day, "dd")}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
+                      <p className="text-muted-dark font-medium">
+                        {format(day, "EEE", { locale: localeId })}
+                      </p>
+                      <div className="flex justify-center mt-0.5">
+                        <span
+                          className={cn(
+                            "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all",
+                            isToday
+                              ? "bg-primary text-white shadow-sm"
+                              : "text-foreground"
+                          )}
+                        >
+                          {format(day, "dd")}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
 
             {/* Time grid container */}
             <div className="relative grid grid-cols-[64px_repeat(7,1fr)]">
@@ -368,7 +375,7 @@ export function CalendarView() {
                     {HOURS.slice(0, -1).map((_, lineIdx) => (
                       <div
                         key={lineIdx}
-                        className="absolute inset-x-0 border-b border-border/40 pointer-events-none"
+                        className="absolute inset-x-0 border-b border-border/60 pointer-events-none"
                         style={{ top: `${(lineIdx + 1) * HOUR_HEIGHT}px` }}
                       />
                     ))}
@@ -408,7 +415,7 @@ export function CalendarView() {
                                 }
                           }
                           className={cn(
-                            "absolute bg-gradient-to-br from-primary/15 to-primary/25 border-l-3 border-primary rounded-lg py-1 overflow-hidden z-10 cursor-pointer shadow-sm hover:shadow-md hover:scale-[1.02] hover:z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:z-20 transition-all group",
+                            "absolute bg-gradient-to-br from-primary/15 to-primary/25 border border-primary/20 border-l-[3px] border-l-primary dark:border-primary/30 dark:border-l-primary rounded-lg py-1 overflow-hidden z-10 cursor-pointer shadow-sm hover:shadow-md hover:scale-[1.02] hover:z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:z-20 transition-all group",
                             totalColumns > 1 ? "px-1.5" : "px-2"
                           )}
                           title={`${s.course_name} (${s.start_time}–${s.end_time})${
@@ -419,14 +426,14 @@ export function CalendarView() {
                           }`}
                         >
                           <div className="flex items-start justify-between gap-1">
-                            <p className="text-xs font-bold text-primary truncate leading-tight group-hover:text-primary-dark">
+                            <p className="text-xs font-bold text-primary truncate leading-tight group-hover:text-primary-dark dark:group-hover:text-primary-light">
                               {s.course_name}
                             </p>
                           </div>
                           <p className="text-[10px] text-muted-dark font-medium truncate mt-0.5">
                             {s.start_time}–{s.end_time}
                           </p>
-                          {height > 44 && s.location && (
+                          {height > 52 && s.location && (
                             <p className="text-[10px] text-muted truncate flex items-center gap-0.5 mt-0.5">
                               <MapPin className="w-2.5 h-2.5 shrink-0" />
                               <span>{s.location}</span>
@@ -440,7 +447,8 @@ export function CalendarView() {
               })}
             </div>
           </div>
-        </Card>
+        </div>
+      </Card>
       )}
 
       {/* Day View */}
@@ -490,13 +498,22 @@ export function CalendarView() {
                   {daySchedules.map((s) => (
                     <div
                       key={s.id}
-                      className="flex items-start justify-between gap-4 p-4 rounded-2xl bg-surface-muted border border-border/60 hover:border-primary/40 hover:bg-soft-accent/30 transition-all group"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleOpenEdit(s)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          handleOpenEdit(s);
+                        }
+                      }}
+                      className="flex items-start justify-between gap-4 p-4 rounded-2xl bg-surface-muted border border-border/60 hover:border-primary/40 hover:bg-soft-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-all cursor-pointer group"
                     >
                       <div className="flex items-start gap-3.5 min-w-0 flex-1">
                         <div className="w-1.5 self-stretch rounded-full bg-primary shrink-0" />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-bold text-base text-foreground">
+                            <h3 className="font-bold text-base text-foreground group-hover:text-primary transition-colors">
                               {s.course_name}
                             </h3>
                             {s.course_code && (
@@ -522,10 +539,16 @@ export function CalendarView() {
                       </div>
 
                       {/* Action buttons */}
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div
+                        className="flex items-center gap-1 shrink-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <button
                           type="button"
-                          onClick={() => handleOpenEdit(s)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEdit(s);
+                          }}
                           className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-soft-accent transition-colors cursor-pointer"
                           aria-label={`Edit ${s.course_name}`}
                         >
@@ -533,7 +556,10 @@ export function CalendarView() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setScheduleToDelete(s)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setScheduleToDelete(s);
+                          }}
                           className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger-light transition-colors cursor-pointer"
                           aria-label={`Hapus ${s.course_name}`}
                         >
