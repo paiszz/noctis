@@ -183,7 +183,7 @@ export function TaskFormModal({
               type="datetime-local"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
-              className="w-full px-3 py-2 text-xs sm:text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus"
+              className="w-full px-3 py-2 text-xs sm:text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus [color-scheme:light] dark:[color-scheme:dark]"
             />
           </div>
 
