@@ -211,7 +211,7 @@ export function AgendaView() {
                     >
                       <div className="flex items-start gap-3 sm:gap-4">
                         {/* Date badge */}
-                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-soft-accent to-[#ECE7FE] flex flex-col items-center justify-center shrink-0 border border-primary/20 shadow-sm">
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-soft-accent to-[#ECE7FE] dark:to-soft-accent/60 flex flex-col items-center justify-center shrink-0 border border-primary/20 shadow-sm">
                           <span className="text-lg font-extrabold text-primary leading-none">
                             {format(startDate, "dd")}
                           </span>

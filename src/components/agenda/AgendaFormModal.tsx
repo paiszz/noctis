@@ -198,7 +198,7 @@ export function AgendaFormModal({
                   setStartAt(e.target.value);
                   if (errors.time) setErrors((prev) => ({ ...prev, time: undefined }));
                 }}
-                className="w-full px-3 py-2 text-xs sm:text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus"
+                className="w-full px-3 py-2 text-xs sm:text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus [color-scheme:light] dark:[color-scheme:dark]"
               />
             </div>
 
@@ -217,7 +217,7 @@ export function AgendaFormModal({
                   setEndAt(e.target.value);
                   if (errors.time) setErrors((prev) => ({ ...prev, time: undefined }));
                 }}
-                className="w-full px-3 py-2 text-xs sm:text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus"
+                className="w-full px-3 py-2 text-xs sm:text-sm bg-surface-muted border border-border rounded-xl text-foreground focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus [color-scheme:light] dark:[color-scheme:dark]"
               />
             </div>
           </div>
