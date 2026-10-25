@@ -7,11 +7,13 @@ import { Moon, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 import { Card, Button } from "@/components/ui";
 import { createBrowserClient } from "@/lib/supabase";
 import { toast } from "sonner";
+import { sanitizeRedirectUrl } from "@/lib/utils";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo") || "/dashboard";
+  const rawRedirectTo = searchParams.get("redirectTo");
+  const redirectTo = sanitizeRedirectUrl(rawRedirectTo, "/dashboard");
   const errorCode = searchParams.get("error");
 
   const [email, setEmail] = useState("");
