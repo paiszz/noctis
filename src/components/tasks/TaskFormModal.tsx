@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Modal, Button, Select, DateTimePicker } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
 import { useData } from "@/lib/data-context";
+import { isoToDatetimeLocal, datetimeLocalToIso, DEFAULT_TIMEZONE } from "@/lib/date";
 import { PRIORITY_LABELS, STATUS_LABELS } from "@/types";
 import type { Task, TaskPriority, TaskStatus } from "@/types";
 import { toast } from "sonner";
@@ -33,7 +34,8 @@ export function TaskFormModal({
   onClose,
   taskToEdit,
 }: TaskFormModalProps) {
-  const { addTask, updateTask, schedules } = useData();
+  const { addTask, updateTask, schedules, preferences } = useData();
+  const userTimezone = preferences?.timezone || DEFAULT_TIMEZONE;
 
   const courseOptions: SelectOption<string>[] = [
     { value: "", label: "-- Tidak terkait matkul --" },
@@ -56,22 +58,8 @@ export function TaskFormModal({
     if (taskToEdit) {
       setTitle(taskToEdit.title);
       setDescription(taskToEdit.description || "");
-      // Convert ISO due_at to local datetime-local value (YYYY-MM-DDTHH:mm)
-      if (taskToEdit.due_at) {
-        try {
-          const d = new Date(taskToEdit.due_at);
-          // Format as YYYY-MM-DDTHH:mm using local parts
-          const pad = (n: number) => String(n).padStart(2, "0");
-          const localStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
-            d.getDate()
-          )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-          setDueDate(localStr);
-        } catch {
-          setDueDate("");
-        }
-      } else {
-        setDueDate("");
-      }
+      // Convert ISO due_at to local datetime-local value (YYYY-MM-DDTHH:mm) in user timezone
+      setDueDate(taskToEdit.due_at ? isoToDatetimeLocal(taskToEdit.due_at, userTimezone) : "");
       setPriority(taskToEdit.priority);
       setStatus(taskToEdit.status);
       setCourseScheduleId(taskToEdit.course_schedule_id || "");
@@ -85,7 +73,7 @@ export function TaskFormModal({
       setCourseScheduleId("");
     }
     setErrors({});
-  }, [taskToEdit, isOpen]);
+  }, [taskToEdit, isOpen, userTimezone]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,13 +83,7 @@ export function TaskFormModal({
       return;
     }
 
-    let isoDueDate: string | undefined = undefined;
-    if (dueDate) {
-      const parsed = new Date(dueDate);
-      if (!isNaN(parsed.getTime())) {
-        isoDueDate = parsed.toISOString();
-      }
-    }
+    const isoDueDate = dueDate ? datetimeLocalToIso(dueDate, userTimezone) || undefined : undefined;
 
     try {
       setIsSubmitting(true);

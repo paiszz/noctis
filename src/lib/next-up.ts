@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { toJakartaDate } from "@/lib/date";
+import { toTimezoneDate, DEFAULT_TIMEZONE } from "@/lib/date";
 import type { CourseSchedule, AgendaEvent, DayOfWeek } from "@/types";
 
 export interface NextUpActivity {
@@ -18,7 +18,7 @@ export interface NextUpActivity {
  * Determines the Next Up activity between today's course schedules and agenda events.
  *
  * Rules:
- * 1. Timezone: All calculations use Asia/Jakarta timezone.
+ * 1. Timezone: Calculations use user timezone (default: Asia/Jakarta).
  * 2. Ongoing Priority: If any activity is currently ongoing (start <= now && end >= now),
  *    the ongoing activity takes precedence. If multiple ongoing exist, the one with earliest start wins.
  * 3. Upcoming Nearest: If no activity is ongoing, the upcoming activity (start > now)
@@ -32,11 +32,13 @@ export interface NextUpActivity {
 export function determineNextUpActivity(
   schedules: CourseSchedule[],
   agendaEvents: AgendaEvent[],
-  now: Date = toJakartaDate(new Date())
+  now?: Date,
+  timezone: string = DEFAULT_TIMEZONE
 ): NextUpActivity | null {
-  const currentTime = now.getTime();
-  const todayDay = now.getDay() as DayOfWeek;
-  const todayStr = format(now, "yyyy-MM-dd");
+  const effectiveNow = now ?? toTimezoneDate(new Date(), timezone);
+  const currentTime = effectiveNow.getTime();
+  const todayDay = effectiveNow.getDay() as DayOfWeek;
+  const todayStr = format(effectiveNow, "yyyy-MM-dd");
 
   const candidates: NextUpActivity[] = [];
 
@@ -50,10 +52,10 @@ export function determineNextUpActivity(
 
     if (isNaN(startH) || isNaN(startM) || isNaN(endH) || isNaN(endM)) continue;
 
-    const startDateTime = new Date(now);
+    const startDateTime = new Date(effectiveNow);
     startDateTime.setHours(startH, startM, 0, 0);
 
-    const endDateTime = new Date(now);
+    const endDateTime = new Date(effectiveNow);
     endDateTime.setHours(endH, endM, 0, 0);
 
     // If end_time is earlier than start_time (overnight), roll over to next day
@@ -85,10 +87,10 @@ export function determineNextUpActivity(
   for (const a of agendaEvents) {
     if (!a.start_at) continue;
 
-    const startDateTime = toJakartaDate(a.start_at);
+    const startDateTime = toTimezoneDate(a.start_at, timezone);
     // If end_at is not specified, assume standard 1 hour duration
     const endDateTime = a.end_at
-      ? toJakartaDate(a.end_at)
+      ? toTimezoneDate(a.end_at, timezone)
       : new Date(startDateTime.getTime() + 60 * 60 * 1000);
 
     const isOngoing =

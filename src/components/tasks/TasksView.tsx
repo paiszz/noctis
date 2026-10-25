@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale/id";
 import {
@@ -17,7 +17,7 @@ import {
 import { Card, Badge, Button, EmptyState, Modal, priorityVariant, Select } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
 import { useData } from "@/lib/data-context";
-import { toJakartaDate } from "@/lib/date";
+import { toTimezoneDate, DEFAULT_TIMEZONE } from "@/lib/date";
 import {
   PRIORITY_LABELS,
   STATUS_LABELS,
@@ -46,12 +46,22 @@ const STATUS_FILTERS: { value: FilterStatus; label: string }[] = [
 ];
 
 export function TasksView() {
-  const { tasks, toggleTaskStatus, deleteTask, schedules, isLoaded } = useData();
+  const { tasks, toggleTaskStatus, deleteTask, schedules, preferences, isLoaded } = useData();
+  const userTimezone = preferences?.timezone || DEFAULT_TIMEZONE;
 
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [filterPriority, setFilterPriority] = useState<FilterPriority>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [now] = useState<Date>(() => toJakartaDate(new Date()));
+  const [now, setNow] = useState<Date>(() => toTimezoneDate(new Date(), userTimezone));
+
+  useEffect(() => {
+    // Keep user timezone time synchronized on client mount and update every minute
+    setNow(toTimezoneDate(new Date(), userTimezone));
+    const timer = setInterval(() => {
+      setNow(toTimezoneDate(new Date(), userTimezone));
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [userTimezone]);
 
   // Modal states
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -82,7 +92,7 @@ export function TasksView() {
 
     // Filter by status
     if (filterStatus === "overdue") {
-      list = list.filter((t) => isOverdue(t, now));
+      list = list.filter((t) => isOverdue(t, now, userTimezone));
     } else if (filterStatus !== "all") {
       list = list.filter((t) => t.status === filterStatus);
     }
@@ -100,8 +110,8 @@ export function TasksView() {
     };
 
     list.sort((a, b) => {
-      const aOverdue = isOverdue(a, now);
-      const bOverdue = isOverdue(b, now);
+      const aOverdue = isOverdue(a, now, userTimezone);
+      const bOverdue = isOverdue(b, now, userTimezone);
       if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
       if (a.priority !== b.priority)
         return priorityOrder[a.priority] - priorityOrder[b.priority];
@@ -111,7 +121,7 @@ export function TasksView() {
     });
 
     return list;
-  }, [tasks, filterStatus, filterPriority, searchQuery, now]);
+  }, [tasks, filterStatus, filterPriority, searchQuery, now, userTimezone]);
 
   const counts = useMemo(
     () => ({
@@ -119,9 +129,9 @@ export function TasksView() {
       todo: tasks.filter((t) => t.status === "todo").length,
       in_progress: tasks.filter((t) => t.status === "in_progress").length,
       done: tasks.filter((t) => t.status === "done").length,
-      overdue: tasks.filter((t) => isOverdue(t, now)).length,
+      overdue: tasks.filter((t) => isOverdue(t, now, userTimezone)).length,
     }),
-    [tasks, now]
+    [tasks, now, userTimezone]
   );
 
   const handleOpenCreate = () => {
@@ -301,7 +311,7 @@ export function TasksView() {
       ) : (
         <div className="space-y-2.5">
           {filteredTasks.map((t) => {
-            const overdue = isOverdue(t, now);
+            const overdue = isOverdue(t, now, userTimezone);
             const courseLabel = t.course_schedule_id
               ? scheduleMap.get(t.course_schedule_id)
               : null;
@@ -402,7 +412,7 @@ export function TasksView() {
                             {overdue
                               ? "Terlambat • "
                               : "Deadline: "}
-                            {format(toJakartaDate(t.due_at), "dd MMM yyyy, HH:mm", {
+                            {format(toTimezoneDate(t.due_at, userTimezone), "dd MMM yyyy, HH:mm", {
                               locale: localeId,
                             })}
                           </span>

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Modal, Button, Select, DateTimePicker } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
 import { useData } from "@/lib/data-context";
+import { isoToDatetimeLocal, datetimeLocalToIso, DEFAULT_TIMEZONE } from "@/lib/date";
 import type { AgendaEvent } from "@/types";
 import { toast } from "sonner";
 import { Trash2, Bell } from "lucide-react";
@@ -24,26 +25,14 @@ const REMINDER_OPTIONS: SelectOption<string>[] = [
   { value: "1440", label: "1 hari sebelumnya" },
 ];
 
-function toLocalDatetimeString(isoStr?: string): string {
-  if (!isoStr) return "";
-  try {
-    const d = new Date(isoStr);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-      d.getHours()
-    )}:${pad(d.getMinutes())}`;
-  } catch {
-    return "";
-  }
-}
-
 export function AgendaFormModal({
   isOpen,
   onClose,
   agendaToEdit,
   onDelete,
 }: AgendaFormModalProps) {
-  const { addAgendaEvent, updateAgendaEvent } = useData();
+  const { addAgendaEvent, updateAgendaEvent, preferences } = useData();
+  const userTimezone = preferences?.timezone || DEFAULT_TIMEZONE;
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [title, setTitle] = useState("");
@@ -58,8 +47,8 @@ export function AgendaFormModal({
     if (agendaToEdit) {
       setTitle(agendaToEdit.title);
       setDescription(agendaToEdit.description || "");
-      setStartAt(toLocalDatetimeString(agendaToEdit.start_at));
-      setEndAt(toLocalDatetimeString(agendaToEdit.end_at));
+      setStartAt(isoToDatetimeLocal(agendaToEdit.start_at, userTimezone));
+      setEndAt(isoToDatetimeLocal(agendaToEdit.end_at, userTimezone));
       setLocation(agendaToEdit.location || "");
       setReminderMinutes(
         agendaToEdit.reminder_minutes !== undefined
@@ -67,7 +56,7 @@ export function AgendaFormModal({
           : "15"
       );
     } else {
-      // Default to today + next hour
+      // Default to today + next hour in user timezone
       const now = new Date();
       now.setMinutes(0, 0, 0);
       now.setHours(now.getHours() + 1);
@@ -75,13 +64,13 @@ export function AgendaFormModal({
 
       setTitle("");
       setDescription("");
-      setStartAt(toLocalDatetimeString(now.toISOString()));
-      setEndAt(toLocalDatetimeString(end.toISOString()));
+      setStartAt(isoToDatetimeLocal(now.toISOString(), userTimezone));
+      setEndAt(isoToDatetimeLocal(end.toISOString(), userTimezone));
       setLocation("");
       setReminderMinutes("15");
     }
     setErrors({});
-  }, [agendaToEdit, isOpen]);
+  }, [agendaToEdit, isOpen, userTimezone]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,7 +83,7 @@ export function AgendaFormModal({
 
     if (!startAt) {
       newErrors.time = "Waktu mulai wajib ditentukan.";
-    } else if (endAt && new Date(endAt) <= new Date(startAt)) {
+    } else if (endAt && endAt <= startAt) {
       newErrors.time = "Waktu selesai harus lebih akhir daripada waktu mulai.";
     }
 
@@ -103,8 +92,8 @@ export function AgendaFormModal({
       return;
     }
 
-    const startISO = new Date(startAt).toISOString();
-    const endISO = endAt ? new Date(endAt).toISOString() : undefined;
+    const startISO = datetimeLocalToIso(startAt, userTimezone);
+    const endISO = endAt ? datetimeLocalToIso(endAt, userTimezone) : undefined;
     const remMin = reminderMinutes !== "" ? Number(reminderMinutes) : undefined;
 
     try {

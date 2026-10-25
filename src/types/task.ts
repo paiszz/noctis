@@ -1,3 +1,5 @@
+import { toTimezoneDate, DEFAULT_TIMEZONE } from "@/lib/date";
+
 export type TaskPriority = "low" | "medium" | "high";
 
 export type TaskStatus = "todo" | "in_progress" | "done";
@@ -28,7 +30,13 @@ export interface Task {
 }
 
 /** Computed at display time — not stored in DB */
-export function isOverdue(task: Task, now: Date = new Date()): boolean {
+export function isOverdue(
+  task: Task,
+  now?: Date,
+  timezone: string = DEFAULT_TIMEZONE
+): boolean {
   if (task.status === "done" || !task.due_at) return false;
-  return new Date(task.due_at) < now;
+  const effectiveNow = now ?? toTimezoneDate(new Date(), timezone);
+  const dueWallClock = toTimezoneDate(task.due_at, timezone).getTime();
+  return dueWallClock < effectiveNow.getTime();
 }

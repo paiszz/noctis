@@ -15,25 +15,26 @@ import {
 } from "lucide-react";
 import { Card, Badge, Button, EmptyState, Modal } from "@/components/ui";
 import { useData } from "@/lib/data-context";
-import { toJakartaDate } from "@/lib/date";
+import { toTimezoneDate, DEFAULT_TIMEZONE } from "@/lib/date";
 import { type AgendaEvent, isUpcomingAgenda, isPastAgenda } from "@/types";
 import { AgendaFormModal } from "./AgendaFormModal";
 import { toast } from "sonner";
 
 export function AgendaView() {
-  const { agendaEvents, deleteAgendaEvent, isLoaded } = useData();
+  const { agendaEvents, deleteAgendaEvent, preferences, isLoaded } = useData();
+  const userTimezone = preferences?.timezone || DEFAULT_TIMEZONE;
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [now, setNow] = useState<Date>(() => toJakartaDate(new Date()));
+  const [now, setNow] = useState<Date>(() => toTimezoneDate(new Date(), userTimezone));
 
   useEffect(() => {
-    // Keep Asia/Jakarta time synchronized on client mount and update every minute
-    setNow(toJakartaDate(new Date()));
+    // Keep user timezone time synchronized on client mount and update every minute
+    setNow(toTimezoneDate(new Date(), userTimezone));
     const timer = setInterval(() => {
-      setNow(toJakartaDate(new Date()));
+      setNow(toTimezoneDate(new Date(), userTimezone));
     }, 60000);
     return () => clearInterval(timer);
-  }, []);
+  }, [userTimezone]);
 
   // Modal states
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -62,16 +63,16 @@ export function AgendaView() {
     return list;
   }, [agendaEvents, searchQuery]);
 
-  // Separate upcoming vs past accurately based on start_at (date and time in WIB)
+  // Separate upcoming vs past accurately based on start_at in user timezone
   const upcoming = useMemo(() => {
-    return filteredEvents.filter((a) => isUpcomingAgenda(a, now));
-  }, [filteredEvents, now]);
+    return filteredEvents.filter((a) => isUpcomingAgenda(a, now, userTimezone));
+  }, [filteredEvents, now, userTimezone]);
 
   const past = useMemo(() => {
     return filteredEvents
-      .filter((a) => isPastAgenda(a, now))
+      .filter((a) => isPastAgenda(a, now, userTimezone))
       .reverse(); // Most recently completed first
-  }, [filteredEvents, now]);
+  }, [filteredEvents, now, userTimezone]);
 
   const handleOpenCreate = () => {
     setEditingAgenda(null);
@@ -199,8 +200,8 @@ export function AgendaView() {
 
               <div className="space-y-2.5">
                 {upcoming.map((event) => {
-                  const startDate = toJakartaDate(event.start_at);
-                  const endDate = event.end_at ? toJakartaDate(event.end_at) : null;
+                  const startDate = toTimezoneDate(event.start_at, userTimezone);
+                  const endDate = event.end_at ? toTimezoneDate(event.end_at, userTimezone) : null;
 
                   return (
                     <Card
@@ -300,7 +301,7 @@ export function AgendaView() {
 
               <div className="space-y-2.5">
                 {past.map((event) => {
-                  const startDate = toJakartaDate(event.start_at);
+                  const startDate = toTimezoneDate(event.start_at, userTimezone);
 
                   return (
                     <Card

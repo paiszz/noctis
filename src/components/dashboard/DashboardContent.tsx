@@ -27,7 +27,7 @@ import Link from "next/link";
 import { Card, Badge, Button, priorityVariant } from "@/components/ui";
 import { useData } from "@/lib/data-context";
 import { useAuth } from "@/lib/auth-context";
-import { toJakartaDate } from "@/lib/date";
+import { toTimezoneDate, DEFAULT_TIMEZONE } from "@/lib/date";
 import { isOverdue, isUpcomingAgenda, isPastAgenda, PRIORITY_LABELS } from "@/types";
 import type { DayOfWeek, CourseSchedule, Task, AgendaEvent, Note } from "@/types";
 import { determineNextUpActivity } from "@/lib/next-up";
@@ -35,7 +35,6 @@ import { toast } from "sonner";
 
 
 export function DashboardContent() {
-  const [now, setNow] = useState<Date>(() => toJakartaDate(new Date()));
   const { user, isLoggingOut } = useAuth();
   const {
     tasks,
@@ -45,11 +44,15 @@ export function DashboardContent() {
     schedules,
     agendaEvents,
     profile,
+    preferences,
     exportAllData,
     isLoaded,
     isProfileLoading,
     isDataLoading,
   } = useData();
+
+  const userTimezone = preferences?.timezone || DEFAULT_TIMEZONE;
+  const [now, setNow] = useState<Date>(() => toTimezoneDate(new Date(), userTimezone));
 
   const isProfilePending = !isLoaded || isProfileLoading || isLoggingOut;
   const displayName = profile?.name ? `${profile.name}.` : user ? "Pengguna Noctis." : "Tamu.";
@@ -58,13 +61,13 @@ export function DashboardContent() {
 
 
   useEffect(() => {
-    // Keep Asia/Jakarta time synchronized on client mount and update every minute
-    setNow(toJakartaDate(new Date()));
+    // Keep user timezone time synchronized on client mount and update every minute
+    setNow(toTimezoneDate(new Date(), userTimezone));
     const timer = setInterval(() => {
-      setNow(toJakartaDate(new Date()));
+      setNow(toTimezoneDate(new Date(), userTimezone));
     }, 60000);
     return () => clearInterval(timer);
-  }, []);
+  }, [userTimezone]);
 
   // ── Date Computations ──
   const greeting = useMemo(() => {
@@ -91,8 +94,8 @@ export function DashboardContent() {
 
   // ── Next Up Activity (evaluated chronologically across schedules & agenda) ──
   const nextUp = useMemo(() => {
-    return determineNextUpActivity(schedules, agendaEvents, now);
-  }, [schedules, agendaEvents, now]);
+    return determineNextUpActivity(schedules, agendaEvents, now, userTimezone);
+  }, [schedules, agendaEvents, now, userTimezone]);
 
   // ── Task Metrics & Progress Ring ──
   const totalTasks = tasks.length;
@@ -113,30 +116,30 @@ export function DashboardContent() {
     return tasks
       .filter((t) => t.status !== "done")
       .sort((a, b) => {
-        const aOverdue = isOverdue(a, now);
-        const bOverdue = isOverdue(b, now);
+        const aOverdue = isOverdue(a, now, userTimezone);
+        const bOverdue = isOverdue(b, now, userTimezone);
         if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
         if (!a.due_at) return 1;
         if (!b.due_at) return -1;
         return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
       })
       .slice(0, 3);
-  }, [tasks, now]);
+  }, [tasks, now, userTimezone]);
 
   // ── Agenda Events (Upcoming vs Completed) ──
   const upcomingEvents = useMemo(() => {
     return agendaEvents
-      .filter((a) => isUpcomingAgenda(a, now))
+      .filter((a) => isUpcomingAgenda(a, now, userTimezone))
       .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
       .slice(0, 2);
-  }, [agendaEvents, now]);
+  }, [agendaEvents, now, userTimezone]);
 
   const pastEvents = useMemo(() => {
     return agendaEvents
-      .filter((a) => isPastAgenda(a, now))
+      .filter((a) => isPastAgenda(a, now, userTimezone))
       .sort((a, b) => new Date(b.start_at).getTime() - new Date(a.start_at).getTime())
       .slice(0, 2);
-  }, [agendaEvents, now]);
+  }, [agendaEvents, now, userTimezone]);
 
   // Activity Card items: Exclusively sourced from Agenda Events (today or nearest upcoming)
   const activityItems = useMemo(() => {
@@ -146,7 +149,7 @@ export function DashboardContent() {
     const todayAgenda = agendaEvents
       .filter((a) => {
         if (!a.start_at) return false;
-        return format(toJakartaDate(a.start_at), "yyyy-MM-dd") === todayStr;
+        return format(toTimezoneDate(a.start_at, userTimezone), "yyyy-MM-dd") === todayStr;
       })
       .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
 
@@ -154,12 +157,12 @@ export function DashboardContent() {
       todayAgenda.length > 0
         ? todayAgenda
         : agendaEvents
-            .filter((a) => isUpcomingAgenda(a, now))
+            .filter((a) => isUpcomingAgenda(a, now, userTimezone))
             .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
 
     return sourceList.slice(0, 3).map((a) => {
-      const aStart = toJakartaDate(a.start_at);
-      const aEnd = a.end_at ? toJakartaDate(a.end_at) : new Date(aStart.getTime() + 60 * 60 * 1000);
+      const aStart = toTimezoneDate(a.start_at, userTimezone);
+      const aEnd = a.end_at ? toTimezoneDate(a.end_at, userTimezone) : new Date(aStart.getTime() + 60 * 60 * 1000);
       const isOngoing = aStart.getTime() <= now.getTime() && aEnd.getTime() >= now.getTime();
       const isPast = aEnd.getTime() < now.getTime();
       const isStartToday = format(aStart, "yyyy-MM-dd") === todayStr;
@@ -654,7 +657,7 @@ export function DashboardContent() {
                           {t.due_at
                             ? overdue
                               ? "Terlambat"
-                              : format(toJakartaDate(t.due_at), "dd MMM · HH.mm", { locale: localeId })
+                              : format(toTimezoneDate(t.due_at, userTimezone), "dd MMM · HH.mm", { locale: localeId })
                             : "Tanpa tenggat"}
                         </p>
                       </div>
@@ -827,7 +830,7 @@ export function DashboardContent() {
                           {a.title}
                         </p>
                         <p className="text-[11px] text-muted mt-0.5">
-                          {format(toJakartaDate(a.start_at), "HH.mm", { locale: localeId })} - {a.end_at ? format(toJakartaDate(a.end_at), "HH.mm") : "Selesai"} · {a.location || "Kampus"}
+                          {format(toTimezoneDate(a.start_at, userTimezone), "HH.mm", { locale: localeId })} - {a.end_at ? format(toTimezoneDate(a.end_at, userTimezone), "HH.mm") : "Selesai"} · {a.location || "Kampus"}
                         </p>
                       </div>
                     </div>
@@ -858,7 +861,7 @@ export function DashboardContent() {
                           {item.title}
                         </p>
                         <p className="text-[11px] text-muted mt-0.5">
-                          {format(toJakartaDate(item.start_at), "dd MMM · HH:mm", {
+                          {format(toTimezoneDate(item.start_at, userTimezone), "dd MMM · HH:mm", {
                             locale: localeId,
                           })}
                           {item.location && ` · ${item.location}`}
@@ -915,7 +918,7 @@ export function DashboardContent() {
                         {n.title}
                       </p>
                       <p className="text-[11px] text-muted mt-0.5">
-                        {format(toJakartaDate(n.updated_at), "dd MMM yyyy", { locale: localeId })} · {n.category || "General"}
+                        {format(toTimezoneDate(n.updated_at, userTimezone), "dd MMM yyyy", { locale: localeId })} · {n.category || "General"}
                       </p>
                     </div>
                   </Link>

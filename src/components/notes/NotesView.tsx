@@ -15,13 +15,14 @@ import {
 } from "lucide-react";
 import { Card, Badge, Button, EmptyState, Modal } from "@/components/ui";
 import { useData } from "@/lib/data-context";
-import { toJakartaDate } from "@/lib/date";
+import { toTimezoneDate, DEFAULT_TIMEZONE } from "@/lib/date";
 import type { Note } from "@/types";
 import { NoteEditorModal } from "./NoteEditorModal";
 import { toast } from "sonner";
 
 export function NotesView() {
-  const { notes, toggleNoteFavorite, deleteNote, isLoaded } = useData();
+  const { notes, toggleNoteFavorite, deleteNote, preferences, isLoaded } = useData();
+  const userTimezone = preferences?.timezone || DEFAULT_TIMEZONE;
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -324,7 +325,7 @@ export function NotesView() {
 
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="text-[10px] text-muted">
-                    {format(toJakartaDate(note.updated_at), "dd MMM yyyy", {
+                    {format(toTimezoneDate(note.updated_at, userTimezone), "dd MMM yyyy", {
                       locale: localeId,
                     })}
                   </span>

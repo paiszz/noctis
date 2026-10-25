@@ -16,7 +16,7 @@ import {
 import { Card, Badge, Button, EmptyState, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useData } from "@/lib/data-context";
-import { toJakartaDate } from "@/lib/date";
+import { toTimezoneDate, DEFAULT_TIMEZONE } from "@/lib/date";
 import { DAY_LABELS } from "@/types";
 import type { DayOfWeek, CourseSchedule } from "@/types";
 import { ScheduleFormModal } from "./ScheduleFormModal";
@@ -159,10 +159,11 @@ export function computeScheduleLayout(daySchedules: CourseSchedule[]): Positione
 }
 
 export function CalendarView() {
-  const { schedules, deleteSchedule, isLoaded } = useData();
+  const { schedules, deleteSchedule, preferences, isLoaded } = useData();
+  const userTimezone = preferences?.timezone || DEFAULT_TIMEZONE;
 
-  const [currentDate, setCurrentDate] = useState<Date>(() => toJakartaDate(new Date()));
-  const [today, setToday] = useState<Date>(() => toJakartaDate(new Date()));
+  const [currentDate, setCurrentDate] = useState<Date>(() => toTimezoneDate(new Date(), userTimezone));
+  const [today, setToday] = useState<Date>(() => toTimezoneDate(new Date(), userTimezone));
   const [view, setView] = useState<"day" | "week">("week");
 
   // Modal states
@@ -172,8 +173,9 @@ export function CalendarView() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    setToday(toJakartaDate(new Date()));
-  }, []);
+    const tzToday = toTimezoneDate(new Date(), userTimezone);
+    setToday(tzToday);
+  }, [userTimezone]);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 }); // Monday
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -186,7 +188,7 @@ export function CalendarView() {
     setCurrentDate((d) => (view === "week" ? addDays(d, 7) : addDays(d, 1)));
   };
 
-  const goToday = () => setCurrentDate(toJakartaDate(new Date()));
+  const goToday = () => setCurrentDate(toTimezoneDate(new Date(), userTimezone));
 
   const handleOpenCreate = () => {
     setEditingSchedule(null);
