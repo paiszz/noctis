@@ -13,7 +13,7 @@ import {
   Bell,
   Search,
 } from "lucide-react";
-import { Card, Badge, Button, EmptyState, Modal } from "@/components/ui";
+import { Card, Button, EmptyState, Modal } from "@/components/ui";
 import { useData } from "@/lib/data-context";
 import { toTimezoneDate, DEFAULT_TIMEZONE } from "@/lib/date";
 import { type AgendaEvent, isUpcomingAgenda, isPastAgenda } from "@/types";
@@ -26,10 +26,16 @@ export function AgendaView() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [now, setNow] = useState<Date>(() => toTimezoneDate(new Date(), userTimezone));
+  const [prevTimezone, setPrevTimezone] = useState(userTimezone);
+
+  // Synchronize now if userTimezone changes during render
+  if (userTimezone !== prevTimezone) {
+    setPrevTimezone(userTimezone);
+    setNow(toTimezoneDate(new Date(), userTimezone));
+  }
 
   useEffect(() => {
-    // Keep user timezone time synchronized on client mount and update every minute
-    setNow(toTimezoneDate(new Date(), userTimezone));
+    // Update current time every minute to keep upcoming/past calculations accurate
     const timer = setInterval(() => {
       setNow(toTimezoneDate(new Date(), userTimezone));
     }, 60000);

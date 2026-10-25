@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect, useCallback, useState } from "react";
+import React, { useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useMounted } from "./use-mounted";
 
 interface ModalProps {
   isOpen: boolean;
@@ -29,11 +30,7 @@ export function Modal({
   children,
   maxWidth = "md",
 }: ModalProps) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useMounted();
 
   // Handle ESC key to close
   const handleKeyDown = useCallback(

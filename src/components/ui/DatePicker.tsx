@@ -6,6 +6,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, ChevronDown, X } from "lucide-
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale/id";
 import { cn } from "@/lib/utils";
+import { useMounted } from "./use-mounted";
 
 export interface DatePickerProps {
   id?: string;
@@ -71,28 +72,26 @@ export function DatePicker({
   const datePickerId = explicitId || generatedId;
   const labelText = ariaLabelProp || ariaLabel;
 
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
   const [isOpen, setIsOpen] = useState(false);
   const [popoverPosition, setPopoverPosition] = useState<PopoverPosition | null>(null);
 
   // Month and year currently displayed in calendar view
   const parsedValue = parseDateString(value);
   const [viewDate, setViewDate] = useState<Date>(() => parsedValue || new Date());
+  const [prevValue, setPrevValue] = useState(value);
+
+  // Synchronize viewDate if value prop changes during render
+  if (value !== prevValue) {
+    setPrevValue(value);
+    if (parsedValue) {
+      setViewDate(parsedValue);
+    }
+  }
 
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Sync calendar view month when value changes
-  useEffect(() => {
-    if (parsedValue) {
-      setViewDate(parsedValue);
-    }
-  }, [value]);
 
   // Dynamic floating position calculation
   const updatePosition = useCallback(() => {
@@ -350,7 +349,6 @@ export function DatePicker({
         ref={triggerRef}
         id={datePickerId}
         type="button"
-        role="combobox"
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         aria-label={labelText}

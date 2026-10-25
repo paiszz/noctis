@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useId, useCallback } from "react";
+import React, { useState, useRef, useEffect, useId, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Clock, ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useMounted } from "./use-mounted";
 
 export interface TimePickerProps {
   id?: string;
@@ -58,7 +59,7 @@ export function TimePicker({
   const timePickerId = explicitId || generatedId;
   const labelText = ariaLabelProp || ariaLabel;
 
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
   const [isOpen, setIsOpen] = useState(false);
   const [popoverPosition, setPopoverPosition] = useState<PopoverPosition | null>(null);
 
@@ -67,10 +68,6 @@ export function TimePicker({
   const popoverRef = useRef<HTMLDivElement>(null);
   const hoursColRef = useRef<HTMLDivElement>(null);
   const minutesColRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Parse hours and minutes from "HH:mm"
   const [valHours, valMinutes] = value && value.includes(":")
@@ -83,7 +80,10 @@ export function TimePicker({
   // Generate minutes based on minuteStep (default: 1 -> 00 to 59)
   const step = Math.max(1, Math.min(30, minuteStep));
   const minutesCount = Math.floor(60 / step);
-  const minutesList = Array.from({ length: minutesCount }, (_, i) => i * step);
+  const minutesList = useMemo(
+    () => Array.from({ length: minutesCount }, (_, i) => i * step),
+    [minutesCount, step]
+  );
 
   // Dynamic floating position calculation
   const updatePosition = useCallback(() => {
@@ -160,7 +160,7 @@ export function TimePicker({
     }, 10);
 
     return () => clearTimeout(timer);
-  }, [isOpen, selectedHour, selectedMinute]);
+  }, [isOpen, selectedHour, selectedMinute, minutesList]);
 
   // Close on click outside (checks both trigger container and portaled popover)
   useEffect(() => {
@@ -290,7 +290,6 @@ export function TimePicker({
         ref={triggerRef}
         id={timePickerId}
         type="button"
-        role="combobox"
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         aria-label={labelText}

@@ -1,15 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef, useSyncExternalStore } from "react";
 import {
   User,
   Bell,
   Palette,
   Globe,
-  Database,
   Download,
   Upload,
-  Check,
   AlertCircle,
   Edit2,
   Moon,
@@ -26,7 +24,6 @@ import { useData } from "@/lib/data-context";
 import { useAuth } from "@/lib/auth-context";
 import { noctisExportSchema } from "@/lib/validation/import-schema";
 import type { ValidatedNoctisExport } from "@/lib/validation/import-schema";
-import type { AppTheme } from "@/types";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -37,6 +34,37 @@ const TIMEZONE_OPTIONS: SelectOption<string>[] = [
   { value: "Asia/Singapore", label: "Asia/Singapore (SGT, UTC+8)" },
   { value: "UTC", label: "UTC (Coordinated Universal Time)" },
 ];
+
+const permissionListeners = new Set<() => void>();
+function notifyPermissionListeners() {
+  permissionListeners.forEach((listener) => listener());
+}
+
+function subscribeNotificationPermission(callback: () => void) {
+  permissionListeners.add(callback);
+  if (typeof navigator !== "undefined" && "permissions" in navigator) {
+    navigator.permissions
+      ?.query({ name: "notifications" as PermissionName })
+      .then((status) => {
+        status.onchange = callback;
+      })
+      .catch(() => {});
+  }
+  return () => {
+    permissionListeners.delete(callback);
+  };
+}
+
+function getNotificationSnapshot(): NotificationPermission | "unsupported" {
+  if (typeof window === "undefined" || !("Notification" in window)) {
+    return "unsupported";
+  }
+  return Notification.permission;
+}
+
+function getNotificationServerSnapshot(): NotificationPermission | "unsupported" {
+  return "default";
+}
 
 export function SettingsView() {
   const {
@@ -68,10 +96,24 @@ export function SettingsView() {
   }>({});
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
-  // Browser notification permission state (safe from SSR hydration mismatch)
-  const [browserPermission, setBrowserPermission] = useState<
-    NotificationPermission | "unsupported"
-  >("default");
+  // Synchronize profile form when modal opens
+  const [prevProfileModalOpen, setPrevProfileModalOpen] = useState(isProfileModalOpen);
+  if (isProfileModalOpen !== prevProfileModalOpen) {
+    setPrevProfileModalOpen(isProfileModalOpen);
+    if (isProfileModalOpen) {
+      setNameInput(profile.name);
+      setEmailInput(profile.email);
+      setTitleInput(profile.title || "");
+      setProfileErrors({});
+    }
+  }
+
+  // Browser notification permission state (safe from SSR hydration mismatch via external store)
+  const browserPermission = useSyncExternalStore(
+    subscribeNotificationPermission,
+    getNotificationSnapshot,
+    getNotificationServerSnapshot
+  );
 
   // File import ref and state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -79,33 +121,13 @@ export function SettingsView() {
     useState<ValidatedNoctisExport | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
-  // Timezone display (loaded on client to prevent SSR hydration mismatch)
-  const [currentTimezone, setCurrentTimezone] = useState("Asia/Jakarta");
-
-  useEffect(() => {
-    // Check Notification API support and permission
-    if (typeof window !== "undefined") {
-      if ("Notification" in window) {
-        setBrowserPermission(Notification.permission);
-      } else {
-        setBrowserPermission("unsupported");
-      }
-    }
-
-    if (preferences.timezone) {
-      setCurrentTimezone(preferences.timezone);
-    }
-  }, [preferences.timezone]);
-
-  // Sync profile form when profile changes or modal opens
-  useEffect(() => {
-    if (isProfileModalOpen) {
-      setNameInput(profile.name);
-      setEmailInput(profile.email);
-      setTitleInput(profile.title || "");
-      setProfileErrors({});
-    }
-  }, [profile, isProfileModalOpen]);
+  // Timezone display (synchronized when preferences change)
+  const [currentTimezone, setCurrentTimezone] = useState(() => preferences.timezone || "Asia/Jakarta");
+  const [prevPrefTz, setPrevPrefTz] = useState(preferences.timezone);
+  if (preferences.timezone && preferences.timezone !== prevPrefTz) {
+    setPrevPrefTz(preferences.timezone);
+    setCurrentTimezone(preferences.timezone);
+  }
 
   // ── Handlers ──
 
@@ -156,7 +178,7 @@ export function SettingsView() {
 
     try {
       const permission = await Notification.requestPermission();
-      setBrowserPermission(permission);
+      notifyPermissionListeners();
 
       if (permission === "granted") {
         toast.success("Izin notifikasi browser berhasil diberikan!");
@@ -165,7 +187,7 @@ export function SettingsView() {
       } else {
         toast.info("Permintaan izin notifikasi ditutup.");
       }
-    } catch (err) {
+    } catch {
       toast.error("Gagal meminta izin notifikasi browser.");
     }
   };
@@ -185,7 +207,7 @@ export function SettingsView() {
       downloadAnchor.remove();
 
       toast.success("Data berhasil diekspor sebagai file JSON.");
-    } catch (err) {
+    } catch {
       toast.error("Terjadi kesalahan saat mengekspor data.");
     }
   };
@@ -211,7 +233,7 @@ export function SettingsView() {
 
         // Valid: prompt confirmation modal with summary
         setPendingImport(validationResult.data);
-      } catch (err) {
+      } catch {
         toast.error("File yang dipilih bukan JSON yang valid.");
       } finally {
         // Reset file input so same file can be selected again if needed

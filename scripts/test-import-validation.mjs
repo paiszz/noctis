@@ -1,7 +1,6 @@
 import assert from "node:assert";
 import { register } from "node:module";
 import path from "node:path";
-import fs from "node:fs";
 import { pathToFileURL } from "node:url";
 
 // Register custom resolve hook for @/ path aliases in Node.js test environment
@@ -38,7 +37,6 @@ const {
   noctisExportSchema,
   taskImportSchema,
   scheduleImportSchema,
-  noteImportSchema,
   agendaImportSchema,
 } = await import(schemaPath);
 
@@ -301,13 +299,6 @@ const isValidUUID = (id) =>
 // ── TEST 4: Penggantian Data yang Berhasil (Replace Semantics) ──
 console.log("[Test 4] Penggantian data yang berhasil (Replace, bukan Append)");
 {
-  const previousState = {
-    schedules: [{ id: "old-sched-1", course_name: "Old Sched 1" }, { id: "old-sched-2", course_name: "Old Sched 2" }],
-    tasks: [{ id: "old-task-1", title: "Old Task 1" }],
-    notes: [{ id: "old-note-1", title: "Old Note 1" }],
-    agendaEvents: [{ id: "old-agenda-1", title: "Old Agenda 1" }],
-  };
-
   const incomingBackup = {
     version: "1.0.0",
     data: {

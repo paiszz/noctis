@@ -35,7 +35,7 @@ import {
   isScheduleActiveOnDate,
   PRIORITY_LABELS,
 } from "@/types";
-import type { DayOfWeek, CourseSchedule, Task, AgendaEvent, Note } from "@/types";
+import type { Note } from "@/types";
 import { determineNextUpActivity } from "@/lib/next-up";
 import { toast } from "sonner";
 
@@ -54,21 +54,23 @@ export function DashboardContent() {
     exportAllData,
     isLoaded,
     isProfileLoading,
-    isDataLoading,
   } = useData();
 
   const userTimezone = preferences?.timezone || DEFAULT_TIMEZONE;
   const [now, setNow] = useState<Date>(() => toTimezoneDate(new Date(), userTimezone));
+  const [prevTimezone, setPrevTimezone] = useState(userTimezone);
+
+  // Synchronize now if userTimezone changes during render
+  if (userTimezone !== prevTimezone) {
+    setPrevTimezone(userTimezone);
+    setNow(toTimezoneDate(new Date(), userTimezone));
+  }
 
   const isProfilePending = !isLoaded || isProfileLoading || isLoggingOut;
   const displayName = profile?.name ? `${profile.name}.` : user ? "Pengguna Noctis." : "Tamu.";
 
-
-
-
   useEffect(() => {
-    // Keep user timezone time synchronized on client mount and update every minute
-    setNow(toTimezoneDate(new Date(), userTimezone));
+    // Keep user timezone time synchronized and update every minute
     const timer = setInterval(() => {
       setNow(toTimezoneDate(new Date(), userTimezone));
     }, 60000);
@@ -192,7 +194,7 @@ export function DashboardContent() {
         isPast,
       };
     });
-  }, [agendaEvents, now]);
+  }, [agendaEvents, now, userTimezone]);
 
   // ── Recent Notes ──
   const recentNotes = useMemo(() => {

@@ -291,7 +291,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const requestSeqRef = useRef<number>(0);
   const prevUserIdRef = useRef<string | null | undefined>(undefined);
   const isLoadedRef = useRef(false);
-  isLoadedRef.current = isLoaded;
+
+  useEffect(() => {
+    isLoadedRef.current = isLoaded;
+  }, [isLoaded]);
 
   // 1. Unified lifecycle effect: waits for authentication status, isolates account states,
   //    and safely synchronizes Tasks, Schedules, Profile, and Preferences from Supabase.
@@ -316,6 +319,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setIsDataLoading(true);
     setIsProfileLoading(true);
     setIsLoaded(false);
+    isLoadedRef.current = false;
 
     // If account switched or user logged out, immediately purge in-memory state
     // so previous user's tasks/schedules never display for even a single frame
@@ -330,99 +334,109 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (!user) {
       // ── GUEST MODE ──
       // Preserve existing localStorage keys without deletion or auto-migration.
-      try {
-        const storedTasks = localStorage.getItem(LEGACY_STORAGE_KEYS.tasks);
-        if (storedTasks) {
-          setTasks(JSON.parse(storedTasks));
-        } else {
-          localStorage.setItem(
-            LEGACY_STORAGE_KEYS.tasks,
-            JSON.stringify(initialMockTasks)
-          );
-          setTasks(initialMockTasks);
-        }
+      async function loadGuestData() {
+        await Promise.resolve();
+        if (seq !== requestSeqRef.current) return;
 
-        const storedNotes = localStorage.getItem(LEGACY_STORAGE_KEYS.notes);
-        if (storedNotes) {
-          setNotes(JSON.parse(storedNotes));
-        } else {
-          localStorage.setItem(
-            LEGACY_STORAGE_KEYS.notes,
-            JSON.stringify(initialMockNotes)
-          );
-          setNotes(initialMockNotes);
-        }
+        try {
+          const storedTasks = localStorage.getItem(LEGACY_STORAGE_KEYS.tasks);
+          if (storedTasks) {
+            setTasks(JSON.parse(storedTasks));
+          } else {
+            localStorage.setItem(
+              LEGACY_STORAGE_KEYS.tasks,
+              JSON.stringify(initialMockTasks)
+            );
+            setTasks(initialMockTasks);
+          }
 
-        const storedSchedules = localStorage.getItem(LEGACY_STORAGE_KEYS.schedules);
-        if (storedSchedules) {
-          setSchedules(JSON.parse(storedSchedules));
-        } else {
-          localStorage.setItem(
-            LEGACY_STORAGE_KEYS.schedules,
-            JSON.stringify(initialMockSchedules)
-          );
-          setSchedules(initialMockSchedules);
-        }
+          const storedNotes = localStorage.getItem(LEGACY_STORAGE_KEYS.notes);
+          if (storedNotes) {
+            setNotes(JSON.parse(storedNotes));
+          } else {
+            localStorage.setItem(
+              LEGACY_STORAGE_KEYS.notes,
+              JSON.stringify(initialMockNotes)
+            );
+            setNotes(initialMockNotes);
+          }
 
-        const storedAgenda = localStorage.getItem(LEGACY_STORAGE_KEYS.agenda);
-        if (storedAgenda) {
-          setAgendaEvents(JSON.parse(storedAgenda));
-        } else {
-          localStorage.setItem(
-            LEGACY_STORAGE_KEYS.agenda,
-            JSON.stringify(initialMockAgendaEvents)
-          );
-          setAgendaEvents(initialMockAgendaEvents);
-        }
+          const storedSchedules = localStorage.getItem(LEGACY_STORAGE_KEYS.schedules);
+          if (storedSchedules) {
+            setSchedules(JSON.parse(storedSchedules));
+          } else {
+            localStorage.setItem(
+              LEGACY_STORAGE_KEYS.schedules,
+              JSON.stringify(initialMockSchedules)
+            );
+            setSchedules(initialMockSchedules);
+          }
 
-        const storedProfile = localStorage.getItem(LEGACY_STORAGE_KEYS.profile);
-        if (storedProfile) {
-          try {
-            const parsed = JSON.parse(storedProfile);
-            // Sanitize obsolete mock identity if present in browser localStorage
-            if (parsed.email === "faiz@example.com") {
-              parsed.email = "";
+          const storedAgenda = localStorage.getItem(LEGACY_STORAGE_KEYS.agenda);
+          if (storedAgenda) {
+            setAgendaEvents(JSON.parse(storedAgenda));
+          } else {
+            localStorage.setItem(
+              LEGACY_STORAGE_KEYS.agenda,
+              JSON.stringify(initialMockAgendaEvents)
+            );
+            setAgendaEvents(initialMockAgendaEvents);
+          }
+
+          const storedProfile = localStorage.getItem(LEGACY_STORAGE_KEYS.profile);
+          if (storedProfile) {
+            try {
+              const parsed = JSON.parse(storedProfile);
+              // Sanitize obsolete mock identity if present in browser localStorage
+              if (parsed.email === "faiz@example.com") {
+                parsed.email = "";
+              }
+              if (parsed.name === "Faiz") {
+                parsed.name = "Tamu";
+              }
+              setProfile(parsed);
+            } catch {
+              setProfile(DEFAULT_GUEST_PROFILE);
             }
-            if (parsed.name === "Faiz") {
-              parsed.name = "Tamu";
-            }
-            setProfile(parsed);
-          } catch {
+          } else {
+            localStorage.setItem(
+              LEGACY_STORAGE_KEYS.profile,
+              JSON.stringify(DEFAULT_GUEST_PROFILE)
+            );
             setProfile(DEFAULT_GUEST_PROFILE);
           }
-        } else {
-          localStorage.setItem(
-            LEGACY_STORAGE_KEYS.profile,
-            JSON.stringify(DEFAULT_GUEST_PROFILE)
-          );
-          setProfile(DEFAULT_GUEST_PROFILE);
-        }
 
-        const storedPrefs = localStorage.getItem(LEGACY_STORAGE_KEYS.preferences);
-        if (storedPrefs) {
-          setPreferences(JSON.parse(storedPrefs));
-        } else {
-          localStorage.setItem(
-            LEGACY_STORAGE_KEYS.preferences,
-            JSON.stringify(DEFAULT_PREFERENCES)
-          );
-          setPreferences(DEFAULT_PREFERENCES);
-        }
-      } catch (err) {
-        console.warn("Noctis: Could not read guest data from localStorage", err);
-        setTasks(initialMockTasks);
-        setNotes(initialMockNotes);
-        setSchedules(initialMockSchedules);
-        setAgendaEvents(initialMockAgendaEvents);
-        setProfile(DEFAULT_GUEST_PROFILE);
-        setPreferences(DEFAULT_PREFERENCES);
-      } finally {
-        if (seq === requestSeqRef.current) {
-          setIsDataLoading(false);
-          setIsProfileLoading(false);
-          setIsLoaded(true);
+          const storedPrefs = localStorage.getItem(LEGACY_STORAGE_KEYS.preferences);
+          if (storedPrefs) {
+            setPreferences(JSON.parse(storedPrefs));
+          } else {
+            localStorage.setItem(
+              LEGACY_STORAGE_KEYS.preferences,
+              JSON.stringify(DEFAULT_PREFERENCES)
+            );
+            setPreferences(DEFAULT_PREFERENCES);
+          }
+        } catch (err) {
+          console.warn("Noctis: Could not read guest data from localStorage", err);
+          if (seq === requestSeqRef.current) {
+            setTasks(initialMockTasks);
+            setNotes(initialMockNotes);
+            setSchedules(initialMockSchedules);
+            setAgendaEvents(initialMockAgendaEvents);
+            setProfile(DEFAULT_GUEST_PROFILE);
+            setPreferences(DEFAULT_PREFERENCES);
+          }
+        } finally {
+          if (seq === requestSeqRef.current) {
+            setIsDataLoading(false);
+            setIsProfileLoading(false);
+            setIsLoaded(true);
+            isLoadedRef.current = true;
+          }
         }
       }
+
+      loadGuestData();
     } else {
       // ── AUTHENTICATED USER MODE ──
       // Feature data is isolated using user-scoped storage keys.
@@ -434,52 +448,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const scopedProfileKey = getScopedStorageKey(user.id, "profile");
       const scopedPreferencesKey = getScopedStorageKey(user.id, "preferences");
 
-      // 1. Fast-path: read scoped local cache for immediate UI responsiveness
-      try {
-        const storedTasks = localStorage.getItem(scopedTasksKey);
-        if (storedTasks) {
-          setTasks(JSON.parse(storedTasks));
-        }
-
-        const storedSchedules = localStorage.getItem(scopedSchedulesKey);
-        if (storedSchedules) {
-          setSchedules(JSON.parse(storedSchedules));
-        }
-
-        const storedNotes = localStorage.getItem(scopedNotesKey);
-        if (storedNotes) {
-          setNotes(JSON.parse(storedNotes));
-        }
-
-        const storedAgenda = localStorage.getItem(scopedAgendaKey);
-        if (storedAgenda) {
-          setAgendaEvents(JSON.parse(storedAgenda));
-        }
-
-        const cachedProfile = localStorage.getItem(scopedProfileKey);
-        if (cachedProfile) {
-          setProfile(JSON.parse(cachedProfile));
-        } else {
-          const interimName =
-            user.user_metadata?.name || user.email?.split("@")[0] || "User";
-          const interimTitle =
-            user.user_metadata?.title || "Personal Workspace";
-          setProfile({
-            name: interimName,
-            email: user.email || "",
-            title: interimTitle,
-          });
-        }
-
-        const cachedPrefs = localStorage.getItem(scopedPreferencesKey);
-        if (cachedPrefs) {
-          setPreferences(JSON.parse(cachedPrefs));
-        }
-      } catch (err) {
-        console.warn("Noctis: Could not read scoped cache from localStorage", err);
-      }
-
-      // 2. Fetch Tasks, Schedules, Profile, and Preferences concurrently from Supabase
       const initialUserName =
         user.user_metadata?.name || user.email?.split("@")[0] || "User";
       const initialUserTitle =
@@ -488,6 +456,51 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const currentUserEmailForFetch = user.email;
 
       async function loadSupabaseUserData() {
+        await Promise.resolve();
+        if (seq !== requestSeqRef.current) return;
+
+        // 1. Fast-path: read scoped local cache for immediate UI responsiveness
+        try {
+          const storedTasks = localStorage.getItem(scopedTasksKey);
+          if (storedTasks) {
+            setTasks(JSON.parse(storedTasks));
+          }
+
+          const storedSchedules = localStorage.getItem(scopedSchedulesKey);
+          if (storedSchedules) {
+            setSchedules(JSON.parse(storedSchedules));
+          }
+
+          const storedNotes = localStorage.getItem(scopedNotesKey);
+          if (storedNotes) {
+            setNotes(JSON.parse(storedNotes));
+          }
+
+          const storedAgenda = localStorage.getItem(scopedAgendaKey);
+          if (storedAgenda) {
+            setAgendaEvents(JSON.parse(storedAgenda));
+          }
+
+          const cachedProfile = localStorage.getItem(scopedProfileKey);
+          if (cachedProfile) {
+            setProfile(JSON.parse(cachedProfile));
+          } else {
+            setProfile({
+              name: initialUserName,
+              email: currentUserEmailForFetch || "",
+              title: initialUserTitle,
+            });
+          }
+
+          const cachedPrefs = localStorage.getItem(scopedPreferencesKey);
+          if (cachedPrefs) {
+            setPreferences(JSON.parse(cachedPrefs));
+          }
+        } catch (err) {
+          console.warn("Noctis: Could not read scoped cache from localStorage", err);
+        }
+
+        // 2. Concurrent Supabase fetch
         try {
           const [profileRes, prefRes, tasksRes, schedulesRes, notesRes, agendaRes] = await Promise.all([
             getUserProfile(currentUserIdForFetch, {
@@ -596,13 +609,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             setIsDataLoading(false);
             setIsProfileLoading(false);
             setIsLoaded(true);
+            isLoadedRef.current = true;
           }
         }
       }
 
       loadSupabaseUserData();
     }
-  }, [currentUserId, isAuthLoading, isLoggingOut]);
+  }, [user, currentUserId, isAuthLoading, isLoggingOut]);
 
   // 2. Synchronize theme to document element class list & listen to system theme changes
   useEffect(() => {

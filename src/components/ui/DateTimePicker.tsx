@@ -6,6 +6,7 @@ import { Calendar, Clock, ChevronLeft, ChevronRight, ChevronDown, X, Check } fro
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale/id";
 import { cn } from "@/lib/utils";
+import { useMounted } from "./use-mounted";
 
 export interface DateTimePickerProps {
   id?: string;
@@ -77,7 +78,7 @@ export function DateTimePicker({
   const dateTimePickerId = explicitId || generatedId;
   const labelText = ariaLabelProp || ariaLabel;
 
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
   const [isOpen, setIsOpen] = useState(false);
   const [popoverPosition, setPopoverPosition] = useState<PopoverPosition | null>(null);
 
@@ -90,6 +91,15 @@ export function DateTimePicker({
 
   // Month view state for calendar navigation
   const [viewDate, setViewDate] = useState<Date>(() => parsedDate || new Date());
+  const [prevDate, setPrevDate] = useState(currentDate);
+
+  // Synchronize viewDate if currentDate prop changes during render
+  if (currentDate !== prevDate) {
+    setPrevDate(currentDate);
+    if (parsedDate) {
+      setViewDate(parsedDate);
+    }
+  }
 
   // Parse hour & minute
   const [valHours, valMinutes] = currentTime
@@ -104,17 +114,6 @@ export function DateTimePicker({
   const popoverRef = useRef<HTMLDivElement>(null);
   const hoursColRef = useRef<HTMLDivElement>(null);
   const minutesColRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Sync calendar view month when date value changes
-  useEffect(() => {
-    if (parsedDate) {
-      setViewDate(parsedDate);
-    }
-  }, [currentDate]);
 
   // Calculate dynamic floating position based on trigger and viewport
   const updatePosition = useCallback(() => {
@@ -171,7 +170,7 @@ export function DateTimePicker({
     setActiveTab("date");
     updatePosition();
     setIsOpen(true);
-  }, [disabled, parsedDate, updatePosition]);
+  }, [disabled, parsedDate, updatePosition, setViewDate]);
 
   const closePopover = useCallback(() => {
     setIsOpen(false);
@@ -428,7 +427,6 @@ export function DateTimePicker({
         ref={triggerRef}
         id={dateTimePickerId}
         type="button"
-        role="combobox"
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         aria-label={labelText}

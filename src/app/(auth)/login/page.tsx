@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Moon, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
@@ -20,13 +20,21 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(() => {
+    if (errorCode === "auth-code-error") {
+      return "Tautan verifikasi tidak valid atau telah kedaluwarsa. Silakan coba masuk kembali.";
+    }
+    return null;
+  });
+  const [prevErrorCode, setPrevErrorCode] = useState(errorCode);
 
-  useEffect(() => {
+  // Synchronize error message if errorCode param changes
+  if (errorCode !== prevErrorCode) {
+    setPrevErrorCode(errorCode);
     if (errorCode === "auth-code-error") {
       setErrorMessage("Tautan verifikasi tidak valid atau telah kedaluwarsa. Silakan coba masuk kembali.");
     }
-  }, [errorCode]);
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Modal, Button, Badge } from "@/components/ui";
+import React, { useState } from "react";
+import { Modal, Button } from "@/components/ui";
 import { useData } from "@/lib/data-context";
 import type { Note } from "@/types";
 import { Star, Trash2, Tag as TagIcon, Folder } from "lucide-react";
@@ -25,41 +25,52 @@ export function NoteEditorModal({
   const { addNote, updateNote } = useData();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [category, setCategory] = useState("Kuliah");
-  const [customCategory, setCustomCategory] = useState("");
+  const initialCat = noteToEdit?.category || "Kuliah";
+  const initialIsDefault = DEFAULT_CATEGORIES.includes(initialCat);
+
+  const [title, setTitle] = useState(() => noteToEdit?.title || "");
+  const [content, setContent] = useState(() => noteToEdit?.content || "");
+  const [category, setCategory] = useState(() => (initialIsDefault ? initialCat : "custom"));
+  const [customCategory, setCustomCategory] = useState(() => (initialIsDefault ? "" : initialCat));
   const [tagInput, setTagInput] = useState("");
-  const [tags, setTags] = useState<string[]>([]);
-  const [isFavorite, setIsFavorite] = useState(false);
+  const [tags, setTags] = useState<string[]>(() => noteToEdit?.tags || []);
+  const [isFavorite, setIsFavorite] = useState(() => Boolean(noteToEdit?.is_favorite));
   const [errors, setErrors] = useState<{ title?: string; content?: string }>({});
 
-  useEffect(() => {
-    if (noteToEdit) {
-      setTitle(noteToEdit.title);
-      setContent(noteToEdit.content);
-      const cat = noteToEdit.category || "Kuliah";
-      if (DEFAULT_CATEGORIES.includes(cat)) {
-        setCategory(cat);
-        setCustomCategory("");
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  const [prevNoteToEdit, setPrevNoteToEdit] = useState(noteToEdit);
+
+  // Synchronize form when modal opens or noteToEdit changes
+  if (isOpen !== prevIsOpen || noteToEdit !== prevNoteToEdit) {
+    setPrevIsOpen(isOpen);
+    setPrevNoteToEdit(noteToEdit);
+    if (isOpen) {
+      if (noteToEdit) {
+        setTitle(noteToEdit.title);
+        setContent(noteToEdit.content);
+        const cat = noteToEdit.category || "Kuliah";
+        if (DEFAULT_CATEGORIES.includes(cat)) {
+          setCategory(cat);
+          setCustomCategory("");
+        } else {
+          setCategory("custom");
+          setCustomCategory(cat);
+        }
+        setTags(noteToEdit.tags || []);
+        setTagInput("");
+        setIsFavorite(noteToEdit.is_favorite);
       } else {
-        setCategory("custom");
-        setCustomCategory(cat);
+        setTitle("");
+        setContent("");
+        setCategory("Kuliah");
+        setCustomCategory("");
+        setTags([]);
+        setTagInput("");
+        setIsFavorite(false);
       }
-      setTags(noteToEdit.tags || []);
-      setTagInput("");
-      setIsFavorite(noteToEdit.is_favorite);
-    } else {
-      setTitle("");
-      setContent("");
-      setCategory("Kuliah");
-      setCustomCategory("");
-      setTags([]);
-      setTagInput("");
-      setIsFavorite(false);
+      setErrors({});
     }
-    setErrors({});
-  }, [noteToEdit, isOpen]);
+  }
 
   const handleAddTag = () => {
     const trimmed = tagInput.trim().replace(/^#/, "");
@@ -95,7 +106,7 @@ export function NoteEditorModal({
         : category.trim() || undefined;
 
     // Check if tagInput has unsaved tag
-    let finalTags = [...tags];
+    const finalTags = [...tags];
     const pendingTag = tagInput.trim().replace(/^#/, "");
     if (pendingTag && !finalTags.includes(pendingTag)) {
       finalTags.push(pendingTag);

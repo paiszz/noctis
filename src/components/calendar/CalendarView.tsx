@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { format, addDays, startOfWeek } from "date-fns";
 import { id as localeId } from "date-fns/locale/id";
 import {
@@ -164,7 +164,14 @@ export function CalendarView() {
 
   const [currentDate, setCurrentDate] = useState<Date>(() => toTimezoneDate(new Date(), userTimezone));
   const [today, setToday] = useState<Date>(() => toTimezoneDate(new Date(), userTimezone));
+  const [prevTimezone, setPrevTimezone] = useState(userTimezone);
   const [view, setView] = useState<"day" | "week">("week");
+
+  // Synchronize today if userTimezone changes during render
+  if (userTimezone !== prevTimezone) {
+    setPrevTimezone(userTimezone);
+    setToday(toTimezoneDate(new Date(), userTimezone));
+  }
 
   // Modal states
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -173,8 +180,11 @@ export function CalendarView() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    const tzToday = toTimezoneDate(new Date(), userTimezone);
-    setToday(tzToday);
+    // Check and update today every minute to reflect midnight transitions
+    const timer = setInterval(() => {
+      setToday(toTimezoneDate(new Date(), userTimezone));
+    }, 60000);
+    return () => clearInterval(timer);
   }, [userTimezone]);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 }); // Monday

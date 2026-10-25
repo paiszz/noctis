@@ -10,8 +10,6 @@ import {
   Star,
   StarOff,
   Trash2,
-  Tag as TagIcon,
-  Folder,
 } from "lucide-react";
 import { Card, Badge, Button, EmptyState, Modal } from "@/components/ui";
 import { useData } from "@/lib/data-context";

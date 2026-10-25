@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Modal, Button, Select, TimePicker, DatePicker } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
 import { useData } from "@/lib/data-context";
@@ -34,42 +34,56 @@ export function ScheduleFormModal({
   const { addSchedule, updateSchedule } = useData();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [courseName, setCourseName] = useState("");
-  const [courseCode, setCourseCode] = useState("");
-  const [dayOfWeek, setDayOfWeek] = useState<DayOfWeek>(defaultDay);
-  const [startTime, setStartTime] = useState("08:00");
-  const [endTime, setEndTime] = useState("09:40");
-  const [location, setLocation] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [courseName, setCourseName] = useState(() => scheduleToEdit?.course_name || "");
+  const [courseCode, setCourseCode] = useState(() => scheduleToEdit?.course_code || "");
+  const [dayOfWeek, setDayOfWeek] = useState<DayOfWeek>(() => scheduleToEdit?.day_of_week || defaultDay);
+  const [startTime, setStartTime] = useState(() => scheduleToEdit?.start_time || "08:00");
+  const [endTime, setEndTime] = useState(() => scheduleToEdit?.end_time || "09:40");
+  const [location, setLocation] = useState(() => scheduleToEdit?.location || "");
+  const [startDate, setStartDate] = useState(() =>
+    scheduleToEdit?.start_date ? scheduleToEdit.start_date.slice(0, 10) : ""
+  );
+  const [endDate, setEndDate] = useState(() =>
+    scheduleToEdit?.end_date ? scheduleToEdit.end_date.slice(0, 10) : ""
+  );
   const [errors, setErrors] = useState<{
     courseName?: string;
     time?: string;
     date?: string;
   }>({});
 
-  useEffect(() => {
-    if (scheduleToEdit) {
-      setCourseName(scheduleToEdit.course_name);
-      setCourseCode(scheduleToEdit.course_code || "");
-      setDayOfWeek(scheduleToEdit.day_of_week);
-      setStartTime(scheduleToEdit.start_time);
-      setEndTime(scheduleToEdit.end_time);
-      setLocation(scheduleToEdit.location || "");
-      setStartDate(scheduleToEdit.start_date ? scheduleToEdit.start_date.slice(0, 10) : "");
-      setEndDate(scheduleToEdit.end_date ? scheduleToEdit.end_date.slice(0, 10) : "");
-    } else {
-      setCourseName("");
-      setCourseCode("");
-      setDayOfWeek(defaultDay);
-      setStartTime("08:00");
-      setEndTime("09:40");
-      setLocation("");
-      setStartDate("");
-      setEndDate("");
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  const [prevScheduleToEdit, setPrevScheduleToEdit] = useState(scheduleToEdit);
+  const [prevDefaultDay, setPrevDefaultDay] = useState(defaultDay);
+
+  // Synchronize form when modal opens, scheduleToEdit changes, or defaultDay changes
+  if (isOpen !== prevIsOpen || scheduleToEdit !== prevScheduleToEdit || defaultDay !== prevDefaultDay) {
+    setPrevIsOpen(isOpen);
+    setPrevScheduleToEdit(scheduleToEdit);
+    setPrevDefaultDay(defaultDay);
+    if (isOpen) {
+      if (scheduleToEdit) {
+        setCourseName(scheduleToEdit.course_name);
+        setCourseCode(scheduleToEdit.course_code || "");
+        setDayOfWeek(scheduleToEdit.day_of_week);
+        setStartTime(scheduleToEdit.start_time);
+        setEndTime(scheduleToEdit.end_time);
+        setLocation(scheduleToEdit.location || "");
+        setStartDate(scheduleToEdit.start_date ? scheduleToEdit.start_date.slice(0, 10) : "");
+        setEndDate(scheduleToEdit.end_date ? scheduleToEdit.end_date.slice(0, 10) : "");
+      } else {
+        setCourseName("");
+        setCourseCode("");
+        setDayOfWeek(defaultDay);
+        setStartTime("08:00");
+        setEndTime("09:40");
+        setLocation("");
+        setStartDate("");
+        setEndDate("");
+      }
+      setErrors({});
     }
-    setErrors({});
-  }, [scheduleToEdit, isOpen, defaultDay]);
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

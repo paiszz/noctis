@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useId, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useMounted } from "./use-mounted";
 
 export interface SelectOption<T extends string | number = string> {
   value: T;
@@ -60,7 +61,7 @@ export function Select<T extends string | number = string>({
   const listboxId = `${selectId}-listbox`;
   const labelText = ariaLabelProp || ariaLabel;
 
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
   const [dropdownPosition, setDropdownPosition] = useState<DropdownPosition | null>(null);
@@ -71,10 +72,6 @@ export function Select<T extends string | number = string>({
 
   const selectedIndex = options.findIndex((opt) => opt.value === value);
   const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : null;
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Calculate dynamic floating position based on trigger and viewport
   const updatePosition = useCallback(() => {

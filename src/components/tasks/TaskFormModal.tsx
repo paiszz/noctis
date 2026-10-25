@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Modal, Button, Select, DateTimePicker } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
 import { useData } from "@/lib/data-context";
@@ -45,35 +45,47 @@ export function TaskFormModal({
     })),
   ];
 
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [dueDate, setDueDate] = useState("");
-  const [priority, setPriority] = useState<TaskPriority>("medium");
-  const [status, setStatus] = useState<TaskStatus>("todo");
-  const [courseScheduleId, setCourseScheduleId] = useState<string>("");
+  const [title, setTitle] = useState(() => taskToEdit?.title || "");
+  const [description, setDescription] = useState(() => taskToEdit?.description || "");
+  const [dueDate, setDueDate] = useState(() =>
+    taskToEdit?.due_at ? isoToDatetimeLocal(taskToEdit.due_at, userTimezone) : ""
+  );
+  const [priority, setPriority] = useState<TaskPriority>(() => taskToEdit?.priority || "medium");
+  const [status, setStatus] = useState<TaskStatus>(() => taskToEdit?.status || "todo");
+  const [courseScheduleId, setCourseScheduleId] = useState<string>(
+    () => taskToEdit?.course_schedule_id || ""
+  );
   const [errors, setErrors] = useState<{ title?: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (taskToEdit) {
-      setTitle(taskToEdit.title);
-      setDescription(taskToEdit.description || "");
-      // Convert ISO due_at to local datetime-local value (YYYY-MM-DDTHH:mm) in user timezone
-      setDueDate(taskToEdit.due_at ? isoToDatetimeLocal(taskToEdit.due_at, userTimezone) : "");
-      setPriority(taskToEdit.priority);
-      setStatus(taskToEdit.status);
-      setCourseScheduleId(taskToEdit.course_schedule_id || "");
-    } else {
-      // Reset form
-      setTitle("");
-      setDescription("");
-      setDueDate("");
-      setPriority("medium");
-      setStatus("todo");
-      setCourseScheduleId("");
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  const [prevTaskToEdit, setPrevTaskToEdit] = useState(taskToEdit);
+  const [prevTimezone, setPrevTimezone] = useState(userTimezone);
+
+  // Synchronize form when modal opens, taskToEdit changes, or userTimezone changes
+  if (isOpen !== prevIsOpen || taskToEdit !== prevTaskToEdit || userTimezone !== prevTimezone) {
+    setPrevIsOpen(isOpen);
+    setPrevTaskToEdit(taskToEdit);
+    setPrevTimezone(userTimezone);
+    if (isOpen) {
+      if (taskToEdit) {
+        setTitle(taskToEdit.title);
+        setDescription(taskToEdit.description || "");
+        setDueDate(taskToEdit.due_at ? isoToDatetimeLocal(taskToEdit.due_at, userTimezone) : "");
+        setPriority(taskToEdit.priority);
+        setStatus(taskToEdit.status);
+        setCourseScheduleId(taskToEdit.course_schedule_id || "");
+      } else {
+        setTitle("");
+        setDescription("");
+        setDueDate("");
+        setPriority("medium");
+        setStatus("todo");
+        setCourseScheduleId("");
+      }
+      setErrors({});
     }
-    setErrors({});
-  }, [taskToEdit, isOpen, userTimezone]);
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

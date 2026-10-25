@@ -12,7 +12,6 @@ import {
   Edit2,
   Trash2,
   BookOpen,
-  Filter,
 } from "lucide-react";
 import { Card, Badge, Button, EmptyState, Modal, priorityVariant, Select } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
@@ -53,10 +52,16 @@ export function TasksView() {
   const [filterPriority, setFilterPriority] = useState<FilterPriority>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [now, setNow] = useState<Date>(() => toTimezoneDate(new Date(), userTimezone));
+  const [prevTimezone, setPrevTimezone] = useState(userTimezone);
+
+  // Synchronize now if userTimezone changes during render
+  if (userTimezone !== prevTimezone) {
+    setPrevTimezone(userTimezone);
+    setNow(toTimezoneDate(new Date(), userTimezone));
+  }
 
   useEffect(() => {
-    // Keep user timezone time synchronized on client mount and update every minute
-    setNow(toTimezoneDate(new Date(), userTimezone));
+    // Update current time every minute to keep overdue calculations accurate
     const timer = setInterval(() => {
       setNow(toTimezoneDate(new Date(), userTimezone));
     }, 60000);

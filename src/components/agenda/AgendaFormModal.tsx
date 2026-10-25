@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Modal, Button, Select, DateTimePicker } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
 import { useData } from "@/lib/data-context";
@@ -35,42 +35,68 @@ export function AgendaFormModal({
   const userTimezone = preferences?.timezone || DEFAULT_TIMEZONE;
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [startAt, setStartAt] = useState("");
-  const [endAt, setEndAt] = useState("");
-  const [location, setLocation] = useState("");
-  const [reminderMinutes, setReminderMinutes] = useState("15");
+  const getDefaultTimes = () => {
+    const now = new Date();
+    now.setMinutes(0, 0, 0);
+    now.setHours(now.getHours() + 1);
+    const end = new Date(now.getTime() + 60 * 60 * 1000);
+    return {
+      start: isoToDatetimeLocal(now.toISOString(), userTimezone),
+      end: isoToDatetimeLocal(end.toISOString(), userTimezone),
+    };
+  };
+
+  const [title, setTitle] = useState(() => agendaToEdit?.title || "");
+  const [description, setDescription] = useState(() => agendaToEdit?.description || "");
+  const [startAt, setStartAt] = useState(() =>
+    agendaToEdit
+      ? isoToDatetimeLocal(agendaToEdit.start_at, userTimezone)
+      : getDefaultTimes().start
+  );
+  const [endAt, setEndAt] = useState(() =>
+    agendaToEdit
+      ? isoToDatetimeLocal(agendaToEdit.end_at, userTimezone)
+      : getDefaultTimes().end
+  );
+  const [location, setLocation] = useState(() => agendaToEdit?.location || "");
+  const [reminderMinutes, setReminderMinutes] = useState(
+    () => (agendaToEdit?.reminder_minutes !== undefined ? String(agendaToEdit.reminder_minutes) : "15")
+  );
   const [errors, setErrors] = useState<{ title?: string; time?: string }>({});
 
-  useEffect(() => {
-    if (agendaToEdit) {
-      setTitle(agendaToEdit.title);
-      setDescription(agendaToEdit.description || "");
-      setStartAt(isoToDatetimeLocal(agendaToEdit.start_at, userTimezone));
-      setEndAt(isoToDatetimeLocal(agendaToEdit.end_at, userTimezone));
-      setLocation(agendaToEdit.location || "");
-      setReminderMinutes(
-        agendaToEdit.reminder_minutes !== undefined
-          ? String(agendaToEdit.reminder_minutes)
-          : "15"
-      );
-    } else {
-      // Default to today + next hour in user timezone
-      const now = new Date();
-      now.setMinutes(0, 0, 0);
-      now.setHours(now.getHours() + 1);
-      const end = new Date(now.getTime() + 60 * 60 * 1000);
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  const [prevAgendaToEdit, setPrevAgendaToEdit] = useState(agendaToEdit);
+  const [prevTimezone, setPrevTimezone] = useState(userTimezone);
 
-      setTitle("");
-      setDescription("");
-      setStartAt(isoToDatetimeLocal(now.toISOString(), userTimezone));
-      setEndAt(isoToDatetimeLocal(end.toISOString(), userTimezone));
-      setLocation("");
-      setReminderMinutes("15");
+  // Synchronize form when modal opens, agendaToEdit changes, or userTimezone changes
+  if (isOpen !== prevIsOpen || agendaToEdit !== prevAgendaToEdit || userTimezone !== prevTimezone) {
+    setPrevIsOpen(isOpen);
+    setPrevAgendaToEdit(agendaToEdit);
+    setPrevTimezone(userTimezone);
+    if (isOpen) {
+      if (agendaToEdit) {
+        setTitle(agendaToEdit.title);
+        setDescription(agendaToEdit.description || "");
+        setStartAt(isoToDatetimeLocal(agendaToEdit.start_at, userTimezone));
+        setEndAt(isoToDatetimeLocal(agendaToEdit.end_at, userTimezone));
+        setLocation(agendaToEdit.location || "");
+        setReminderMinutes(
+          agendaToEdit.reminder_minutes !== undefined
+            ? String(agendaToEdit.reminder_minutes)
+            : "15"
+        );
+      } else {
+        const def = getDefaultTimes();
+        setTitle("");
+        setDescription("");
+        setStartAt(def.start);
+        setEndAt(def.end);
+        setLocation("");
+        setReminderMinutes("15");
+      }
+      setErrors({});
     }
-    setErrors({});
-  }, [agendaToEdit, isOpen, userTimezone]);
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

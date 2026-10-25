@@ -1,5 +1,5 @@
 import { createClient as createBrowserClient } from "./client";
-import type { AppTheme, NotificationSettings, UserProfile } from "@/types";
+import type { AppTheme, NotificationSettings } from "@/types";
 
 export interface ProfileRecord {
   id: string;
