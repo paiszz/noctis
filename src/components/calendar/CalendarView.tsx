@@ -17,7 +17,7 @@ import { Card, Badge, Button, EmptyState, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useData } from "@/lib/data-context";
 import { toTimezoneDate, DEFAULT_TIMEZONE } from "@/lib/date";
-import { DAY_LABELS } from "@/types";
+import { DAY_LABELS, isScheduleActiveOnDate } from "@/types";
 import type { DayOfWeek, CourseSchedule } from "@/types";
 import { ScheduleFormModal } from "./ScheduleFormModal";
 import { toast } from "sonner";
@@ -218,10 +218,10 @@ export function CalendarView() {
     }
   };
 
-  // Helper to filter and sort schedules for a specific day
-  const getSchedulesForDay = (day: DayOfWeek): CourseSchedule[] => {
+  // Helper to filter and sort schedules for a specific calendar date (respecting start_date & end_date)
+  const getSchedulesForDate = (date: Date): CourseSchedule[] => {
     return schedules
-      .filter((s) => s.day_of_week === day)
+      .filter((s) => isScheduleActiveOnDate(s, date))
       .sort((a, b) => a.start_time.localeCompare(b.start_time));
   };
 
@@ -360,8 +360,7 @@ export function CalendarView() {
 
               {/* 7 Columns for Weekdays */}
               {weekDays.map((day, colIdx) => {
-                const dayOfWeek = day.getDay() as DayOfWeek;
-                const daySchedules = getSchedulesForDay(dayOfWeek);
+                const daySchedules = getSchedulesForDate(day);
                 const isToday =
                   format(day, "yyyy-MM-dd") === format(today, "yyyy-MM-dd");
 
@@ -422,6 +421,12 @@ export function CalendarView() {
                           )}
                           title={`${s.course_name} (${s.start_time}–${s.end_time})${
                             s.location ? ` • ${s.location}` : ""
+                          }${
+                            s.start_date || s.end_date
+                              ? `\nPeriode: ${s.start_date ? s.start_date.slice(0, 10) : "Awal"} s/d ${
+                                  s.end_date ? s.end_date.slice(0, 10) : "Seterusnya"
+                                }`
+                              : ""
                           }\nKlik untuk edit atau hapus`}
                           aria-label={`${s.course_name}, ${s.start_time} sampai ${s.end_time}${
                             s.location ? `, di ${s.location}` : ""
@@ -459,7 +464,7 @@ export function CalendarView() {
           <div className="space-y-3">
             {(() => {
               const dayOfWeek = currentDate.getDay() as DayOfWeek;
-              const daySchedules = getSchedulesForDay(dayOfWeek);
+              const daySchedules = getSchedulesForDate(currentDate);
 
               if (daySchedules.length === 0) {
                 return (
@@ -534,6 +539,15 @@ export function CalendarView() {
                               <span className="flex items-center gap-1 text-muted">
                                 <MapPin className="w-3.5 h-3.5" />
                                 <span>{s.location}</span>
+                              </span>
+                            )}
+                            {(s.start_date || s.end_date) && (
+                              <span className="flex items-center gap-1 text-muted">
+                                <CalendarDays className="w-3.5 h-3.5" />
+                                <span>
+                                  {s.start_date ? s.start_date.slice(0, 10) : "Awal"} —{" "}
+                                  {s.end_date ? s.end_date.slice(0, 10) : "Seterusnya"}
+                                </span>
                               </span>
                             )}
                           </div>

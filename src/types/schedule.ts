@@ -39,3 +39,63 @@ export interface ScheduleException {
   location?: string;
   created_at: string;
 }
+
+/**
+ * Checks whether a recurring course schedule is active on a specific calendar date.
+ *
+ * Rules:
+ * 1. Day of week must match schedule.day_of_week.
+ * 2. If start_date is set, target date must be >= start_date (inclusive).
+ * 3. If end_date is set, target date must be <= end_date (inclusive).
+ * 4. Backward compatibility: if start_date or end_date are null/undefined/empty
+ *    (e.g., legacy schedules), the schedule is treated as open-ended (unbounded)
+ *    and remains active on every matching weekday.
+ */
+export function isScheduleActiveOnDate(
+  schedule: CourseSchedule,
+  targetDate: Date | string
+): boolean {
+  if (!schedule) return false;
+
+  let dateStr: string;
+  let dayOfWeek: DayOfWeek;
+
+  if (targetDate instanceof Date) {
+    if (isNaN(targetDate.getTime())) return false;
+    const pad = (n: number) => String(n).padStart(2, "0");
+    dateStr = `${targetDate.getFullYear()}-${pad(targetDate.getMonth() + 1)}-${pad(targetDate.getDate())}`;
+    dayOfWeek = targetDate.getDay() as DayOfWeek;
+  } else if (typeof targetDate === "string") {
+    const match = targetDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) return false;
+    dateStr = `${match[1]}-${match[2]}-${match[3]}`;
+    const [y, m, d] = [Number(match[1]), Number(match[2]), Number(match[3])];
+    const parsedDate = new Date(y, m - 1, d);
+    dayOfWeek = parsedDate.getDay() as DayOfWeek;
+  } else {
+    return false;
+  }
+
+  // 1. Day of week match
+  if (schedule.day_of_week !== dayOfWeek) {
+    return false;
+  }
+
+  // 2. Start date boundary (on or after start_date)
+  if (schedule.start_date && schedule.start_date.trim()) {
+    const startStr = schedule.start_date.trim().slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(startStr) && dateStr < startStr) {
+      return false;
+    }
+  }
+
+  // 3. End date boundary (on or before end_date)
+  if (schedule.end_date && schedule.end_date.trim()) {
+    const endStr = schedule.end_date.trim().slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(endStr) && dateStr > endStr) {
+      return false;
+    }
+  }
+
+  return true;
+}

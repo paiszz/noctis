@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Modal, Button, Select, TimePicker } from "@/components/ui";
+import { Modal, Button, Select, TimePicker, DatePicker } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
 import { useData } from "@/lib/data-context";
 import { DAY_LABELS } from "@/types";
@@ -40,9 +40,12 @@ export function ScheduleFormModal({
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("09:40");
   const [location, setLocation] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [errors, setErrors] = useState<{
     courseName?: string;
     time?: string;
+    date?: string;
   }>({});
 
   useEffect(() => {
@@ -53,6 +56,8 @@ export function ScheduleFormModal({
       setStartTime(scheduleToEdit.start_time);
       setEndTime(scheduleToEdit.end_time);
       setLocation(scheduleToEdit.location || "");
+      setStartDate(scheduleToEdit.start_date ? scheduleToEdit.start_date.slice(0, 10) : "");
+      setEndDate(scheduleToEdit.end_date ? scheduleToEdit.end_date.slice(0, 10) : "");
     } else {
       setCourseName("");
       setCourseCode("");
@@ -60,6 +65,8 @@ export function ScheduleFormModal({
       setStartTime("08:00");
       setEndTime("09:40");
       setLocation("");
+      setStartDate("");
+      setEndDate("");
     }
     setErrors({});
   }, [scheduleToEdit, isOpen, defaultDay]);
@@ -67,7 +74,7 @@ export function ScheduleFormModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const newErrors: { courseName?: string; time?: string } = {};
+    const newErrors: { courseName?: string; time?: string; date?: string } = {};
 
     if (!courseName.trim()) {
       newErrors.courseName = "Nama mata kuliah wajib diisi.";
@@ -77,6 +84,10 @@ export function ScheduleFormModal({
       newErrors.time = "Jam mulai dan jam selesai wajib diisi.";
     } else if (endTime <= startTime) {
       newErrors.time = "Jam selesai harus lebih akhir daripada jam mulai.";
+    }
+
+    if (startDate && endDate && endDate < startDate) {
+      newErrors.date = "Tanggal selesai harus sama atau setelah tanggal mulai.";
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -94,6 +105,8 @@ export function ScheduleFormModal({
           start_time: startTime,
           end_time: endTime,
           location: location || undefined,
+          start_date: startDate ? startDate : "",
+          end_date: endDate ? endDate : "",
         });
         toast.success("Jadwal kuliah berhasil diperbarui");
       } else {
@@ -104,6 +117,8 @@ export function ScheduleFormModal({
           start_time: startTime,
           end_time: endTime,
           location: location || undefined,
+          start_date: startDate || undefined,
+          end_date: endDate || undefined,
         });
         toast.success("Jadwal kuliah baru berhasil ditambahkan");
       }
@@ -263,6 +278,59 @@ export function ScheduleFormModal({
             onChange={(e) => setLocation(e.target.value)}
             className="w-full px-3.5 py-2 text-sm bg-surface-muted border border-border rounded-xl text-foreground placeholder:text-muted focus:outline-none focus:border-border-focus"
           />
+        </div>
+
+        {/* 2-column: Start Date & End Date (Rentang Semester) */}
+        <div className="space-y-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label
+                htmlFor="sched-start-date"
+                className="block text-xs font-semibold text-foreground mb-1"
+              >
+                Tanggal Mulai (opsional)
+              </label>
+              <DatePicker
+                id="sched-start-date"
+                value={startDate}
+                onChange={(val) => {
+                  setStartDate(val);
+                  if (errors.date) setErrors((prev) => ({ ...prev, date: undefined }));
+                }}
+                placeholder="Pilih tanggal mulai..."
+                variant="muted"
+                className="w-full"
+                ariaLabel="Tanggal Mulai Semester"
+                maxDate={endDate || undefined}
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="sched-end-date"
+                className="block text-xs font-semibold text-foreground mb-1"
+              >
+                Tanggal Selesai (opsional)
+              </label>
+              <DatePicker
+                id="sched-end-date"
+                value={endDate}
+                onChange={(val) => {
+                  setEndDate(val);
+                  if (errors.date) setErrors((prev) => ({ ...prev, date: undefined }));
+                }}
+                placeholder="Pilih tanggal selesai..."
+                variant="muted"
+                className="w-full"
+                align="right"
+                ariaLabel="Tanggal Selesai Semester"
+                minDate={startDate || undefined}
+              />
+            </div>
+          </div>
+          {errors.date && (
+            <p className="text-xs text-danger mt-1">{errors.date}</p>
+          )}
         </div>
 
         {/* Modal Footer */}

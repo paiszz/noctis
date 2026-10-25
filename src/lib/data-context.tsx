@@ -1335,6 +1335,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
                       : s.course_code,
                   location:
                     updates.location !== undefined ? updates.location.trim() || undefined : s.location,
+                  start_date:
+                    updates.start_date !== undefined ? updates.start_date || undefined : s.start_date,
+                  end_date:
+                    updates.end_date !== undefined ? updates.end_date || undefined : s.end_date,
                   updated_at: new Date().toISOString(),
                 }
               : s
@@ -1375,6 +1379,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
                       : s.course_code,
                   location:
                     updates.location !== undefined ? updates.location.trim() || undefined : s.location,
+                  start_date:
+                    updates.start_date !== undefined ? updates.start_date || undefined : s.start_date,
+                  end_date:
+                    updates.end_date !== undefined ? updates.end_date || undefined : s.end_date,
                   updated_at: new Date().toISOString(),
                 }
               : s
