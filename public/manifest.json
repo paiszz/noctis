@@ -1,0 +1,55 @@
+{
+  "id": "/",
+  "name": "Noctis — Your Personal Productivity Space",
+  "short_name": "Noctis",
+  "description": "Aplikasi produktivitas pribadi untuk mengelola jadwal kuliah, tugas, catatan, agenda, dan pengingat dalam satu tempat.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#F7F8F6",
+  "theme_color": "#0F766E",
+  "categories": ["productivity", "education"],
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/dashboard-desktop.png",
+      "sizes": "1920x912",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Noctis Dashboard — Desktop View"
+    },
+    {
+      "src": "/screenshots/dashboard-mobile.png",
+      "sizes": "628x985",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Noctis Dashboard — Mobile View"
+    }
+  ]
+}
