@@ -49,6 +49,78 @@ function isScheduleActiveOnDate(schedule, targetDate) {
   return true;
 }
 
+const DAY_LABELS = {
+  0: "Minggu",
+  1: "Senin",
+  2: "Selasa",
+  3: "Rabu",
+  4: "Kamis",
+  5: "Jumat",
+  6: "Sabtu",
+};
+
+function doesDateRangeIncludeDay(dayOfWeek, startDateStr, endDateStr) {
+  const matchStart = startDateStr?.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const matchEnd = endDateStr?.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!matchStart || !matchEnd) return true;
+
+  const startUtc = Date.UTC(Number(matchStart[1]), Number(matchStart[2]) - 1, Number(matchStart[3]));
+  const endUtc = Date.UTC(Number(matchEnd[1]), Number(matchEnd[2]) - 1, Number(matchEnd[3]));
+
+  if (startUtc > endUtc) return false;
+
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const totalDays = Math.round((endUtc - startUtc) / msPerDay) + 1;
+
+  if (totalDays >= 7) {
+    return true;
+  }
+
+  for (let t = startUtc; t <= endUtc; t += msPerDay) {
+    if (new Date(t).getUTCDay() === dayOfWeek) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function validateScheduleDateRange(dayOfWeek, startDate, endDate) {
+  const startClean = startDate?.trim() || "";
+  const endClean = endDate?.trim() || "";
+
+  if (!startClean || !endClean) {
+    return { isValid: true };
+  }
+
+  const matchStart = startClean.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const matchEnd = endClean.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (!matchStart || !matchEnd) {
+    return { isValid: true };
+  }
+
+  const startUtc = Date.UTC(Number(matchStart[1]), Number(matchStart[2]) - 1, Number(matchStart[3]));
+  const endUtc = Date.UTC(Number(matchEnd[1]), Number(matchEnd[2]) - 1, Number(matchEnd[3]));
+
+  if (startUtc > endUtc) {
+    return {
+      isValid: false,
+      error: "Tanggal selesai harus sama atau setelah tanggal mulai.",
+    };
+  }
+
+  if (!doesDateRangeIncludeDay(dayOfWeek, startClean, endClean)) {
+    const dayName = DAY_LABELS[dayOfWeek] || "yang dipilih";
+    return {
+      isValid: false,
+      error: `Rentang tanggal tidak mencakup satu pun hari ${dayName}. Pastikan rentang tanggal mencakup setidaknya satu hari ${dayName}.`,
+    };
+  }
+
+  return { isValid: true };
+}
+
 console.log("=== Menjalankan Pengujian Rentang Tanggal Jadwal Kuliah Noctis ===\n");
 
 // Contoh jadwal: Pemrograman Web setiap hari Senin (day_of_week: 1)
@@ -279,6 +351,106 @@ console.log("[Test 11] Konsistensi Lintas Zona Waktu: Tidak terjadi pergeseran t
     );
   }
   console.log("  ✓ Lolos: Konsisten di seluruh zona waktu tanpa pergeseran kalender.");
+}
+
+// [Test 12] Rentang Tanpa Hari Cocok (Ditolak)
+console.log("[Test 12] Validasi Rentang: Rentang yang tidak mencakup day_of_week harus ditolak");
+{
+  // Kalkulus setiap hari Minggu (day_of_week: 0)
+  // Rentang: Senin 2026-10-26 s/d Selasa 2026-10-27 (tidak ada hari Minggu)
+  const result = validateScheduleDateRange(0, "2026-10-26", "2026-10-27");
+  assert.strictEqual(result.isValid, false, "Harus ditolak karena 26-27 Okt tidak mencakup hari Minggu");
+  assert.ok(
+    result.error && result.error.includes("Minggu"),
+    `Pesan error harus menyebutkan hari Minggu: ${result.error}`
+  );
+  console.log("  ✓ Lolos: Rentang tanggal 26–27 Okt ditolak untuk jadwal hari Minggu dengan pesan yang jelas.");
+}
+
+// [Test 13] Rentang dengan Hari Cocok (Diterima)
+console.log("[Test 13] Validasi Rentang: Rentang yang mencakup setidaknya satu hari cocok harus diterima");
+{
+  // Kalkulus hari Minggu (0) dengan rentang Minggu 2026-10-25 s/d Selasa 2026-10-27
+  const result = validateScheduleDateRange(0, "2026-10-25", "2026-10-27");
+  assert.strictEqual(result.isValid, true, "Harus diterima karena mencakup hari Minggu 25 Okt");
+  console.log("  ✓ Lolos: Rentang tanggal 25–27 Okt diterima untuk jadwal hari Minggu.");
+}
+
+// [Test 14] Batas Tanggal Inklusif
+console.log("[Test 14] Batas Tanggal Inklusif: Hari cocok pada start_date, end_date, atau tanggal tunggal");
+{
+  // a. Hari cocok persis pada start_date
+  const onStartResult = validateScheduleDateRange(0, "2026-10-25", "2026-10-26");
+  assert.strictEqual(onStartResult.isValid, true, "Batas awal inklusif (25 Okt adalah Minggu)");
+
+  // b. Hari cocok persis pada end_date
+  const onEndResult = validateScheduleDateRange(0, "2026-10-24", "2026-10-25");
+  assert.strictEqual(onEndResult.isValid, true, "Batas akhir inklusif (25 Okt adalah Minggu)");
+
+  // c. Rentang satu hari yang cocok (start_date === end_date)
+  const singleDayMatch = validateScheduleDateRange(0, "2026-10-25", "2026-10-25");
+  assert.strictEqual(singleDayMatch.isValid, true, "Satu hari Minggu tunggal harus diterima");
+
+  // d. Rentang satu hari yang TIDAK cocok
+  const singleDayNoMatch = validateScheduleDateRange(0, "2026-10-26", "2026-10-26");
+  assert.strictEqual(singleDayNoMatch.isValid, false, "Satu hari Senin untuk kelas Minggu harus ditolak");
+
+  console.log("  ✓ Lolos: Batas awal dan batas akhir bersifat inklusif serta menangani rentang tanggal tunggal.");
+}
+
+// [Test 15] Tanggal Terbalik (start_date > end_date)
+console.log("[Test 15] Tanggal Terbalik: start_date lebih besar dari end_date harus ditolak");
+{
+  const invertedResult = validateScheduleDateRange(0, "2026-10-27", "2026-10-26");
+  assert.strictEqual(invertedResult.isValid, false, "Tanggal terbalik harus ditolak");
+  assert.strictEqual(
+    invertedResult.error,
+    "Tanggal selesai harus sama atau setelah tanggal mulai.",
+    "Pesan error tanggal terbalik harus tepat"
+  );
+  console.log("  ✓ Lolos: Tanggal terbalik (2026-10-27 > 2026-10-26) ditolak dengan pesan yang sesuai.");
+}
+
+// [Test 16] Jadwal Tanpa Batas Tanggal (Unbounded / Parsial)
+console.log("[Test 16] Jadwal Tanpa Batas Tanggal: Unbounded dan parsial tetap diizinkan");
+{
+  // Keduanya null/undefined/empty
+  assert.strictEqual(validateScheduleDateRange(1, null, null).isValid, true);
+  assert.strictEqual(validateScheduleDateRange(1, undefined, undefined).isValid, true);
+  assert.strictEqual(validateScheduleDateRange(1, "", "").isValid, true);
+
+  // Parsial: hanya start_date
+  assert.strictEqual(validateScheduleDateRange(1, "2026-10-26", null).isValid, true);
+  assert.strictEqual(validateScheduleDateRange(1, "2026-10-26", "").isValid, true);
+
+  // Parsial: hanya end_date
+  assert.strictEqual(validateScheduleDateRange(1, null, "2026-10-26").isValid, true);
+  assert.strictEqual(validateScheduleDateRange(1, "", "2026-10-26").isValid, true);
+
+  console.log("  ✓ Lolos: Jadwal tanpa rentang tanggal atau dengan rentang parsial tetap valid.");
+}
+
+// [Test 17] Perubahan Jadwal Saat Diedit (Edit Flow Validation)
+console.log("[Test 17] Alur Edit: Validasi mendeteksi konflik saat hari atau tanggal diubah");
+{
+  // Jadwal awal: Senin (1), rentang 26-28 Okt (Senin s/d Rabu) -> Valid
+  let day = 1;
+  let start = "2026-10-26";
+  let end = "2026-10-28";
+  assert.strictEqual(validateScheduleDateRange(day, start, end).isValid, true);
+
+  // User mengedit jadwal: mengubah hari ke Minggu (0), tanggal belum diubah (26-28 Okt)
+  day = 0;
+  const editConflict = validateScheduleDateRange(day, start, end);
+  assert.strictEqual(editConflict.isValid, false, "Harus ditolak saat hari diubah tanpa menyesuaikan tanggal");
+  assert.ok(editConflict.error.includes("Minggu"));
+
+  // User memperbaiki start_date ke 2026-10-25 (Minggu)
+  start = "2026-10-25";
+  const editResolved = validateScheduleDateRange(day, start, end);
+  assert.strictEqual(editResolved.isValid, true, "Harus diterima setelah tanggal diperbaiki");
+
+  console.log("  ✓ Lolos: Alur edit jadwal memvalidasi perubahan dan mengizinkan perbaikan data.");
 }
 
 console.log("\n=======================================================");

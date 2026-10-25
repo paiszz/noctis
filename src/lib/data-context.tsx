@@ -9,18 +9,19 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import type {
-  Task,
-  Note,
-  CourseSchedule,
-  AgendaEvent,
-  DayOfWeek,
-  TaskPriority,
-  TaskStatus,
-  UserProfile,
-  UserPreferences,
-  NotificationSettings,
-  NoctisExportData,
+import {
+  type Task,
+  type Note,
+  type CourseSchedule,
+  type AgendaEvent,
+  type DayOfWeek,
+  type TaskPriority,
+  type TaskStatus,
+  type UserProfile,
+  type UserPreferences,
+  type NotificationSettings,
+  type NoctisExportData,
+  validateScheduleDateRange,
 } from "@/types";
 import type { ValidatedNoctisExport } from "@/lib/validation/import-schema";
 import {
@@ -1260,6 +1261,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addSchedule = useCallback(
     async (input: ScheduleInput): Promise<CourseSchedule> => {
+      const validation = validateScheduleDateRange(
+        input.day_of_week,
+        input.start_date,
+        input.end_date
+      );
+      if (!validation.isValid) {
+        throw new Error(validation.error || "Rentang tanggal jadwal tidak valid.");
+      }
+
       if (user) {
         const { data, error } = await createUserSchedule(user.id, input);
         if (error || !data) {
@@ -1318,6 +1328,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       id: string,
       updates: Partial<Omit<CourseSchedule, "id" | "user_id">>
     ): Promise<void> => {
+      const existing = schedules.find((s) => s.id === id);
+      const targetDay =
+        updates.day_of_week !== undefined ? updates.day_of_week : existing?.day_of_week ?? 1;
+      const targetStart =
+        updates.start_date !== undefined ? updates.start_date : existing?.start_date;
+      const targetEnd =
+        updates.end_date !== undefined ? updates.end_date : existing?.end_date;
+
+      const validation = validateScheduleDateRange(targetDay, targetStart, targetEnd);
+      if (!validation.isValid) {
+        throw new Error(validation.error || "Rentang tanggal jadwal tidak valid.");
+      }
+
       if (user) {
         let rollbackSchedules: CourseSchedule[] = [];
         setSchedules((prev) => {
@@ -1396,7 +1419,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
       }
     },
-    [user]
+    [user, schedules]
   );
 
   const deleteSchedule = useCallback(

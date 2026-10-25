@@ -99,3 +99,100 @@ export function isScheduleActiveOnDate(
 
   return true;
 }
+
+/**
+ * Result of schedule date range validation.
+ */
+export interface ScheduleDateRangeValidationResult {
+  isValid: boolean;
+  error?: string;
+}
+
+/**
+ * Checks whether a given calendar date range [startDateStr, endDateStr]
+ * contains at least one day matching dayOfWeek.
+ * Both boundaries are inclusive. Uses pure UTC calendar math to prevent any timezone shifts.
+ */
+export function doesDateRangeIncludeDay(
+  dayOfWeek: DayOfWeek,
+  startDateStr: string,
+  endDateStr: string
+): boolean {
+  const matchStart = startDateStr.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const matchEnd = endDateStr.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!matchStart || !matchEnd) return true;
+
+  const startUtc = Date.UTC(Number(matchStart[1]), Number(matchStart[2]) - 1, Number(matchStart[3]));
+  const endUtc = Date.UTC(Number(matchEnd[1]), Number(matchEnd[2]) - 1, Number(matchEnd[3]));
+
+  if (startUtc > endUtc) return false;
+
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const totalDays = Math.round((endUtc - startUtc) / msPerDay) + 1;
+
+  // Spans a full week or more: guarantees every day of week occurs at least once
+  if (totalDays >= 7) {
+    return true;
+  }
+
+  // Iterate day by day for spans under 7 days
+  for (let t = startUtc; t <= endUtc; t += msPerDay) {
+    if (new Date(t).getUTCDay() === dayOfWeek) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Validates a schedule's start_date and end_date range against its day_of_week.
+ *
+ * Rules:
+ * 1. If start_date or end_date are empty/null/undefined, schedule is unbounded and valid.
+ * 2. If both dates are provided:
+ *    - start_date must be <= end_date (inclusive).
+ *    - The range [start_date, end_date] must contain at least one day matching day_of_week.
+ */
+export function validateScheduleDateRange(
+  dayOfWeek: DayOfWeek,
+  startDate?: string | null,
+  endDate?: string | null
+): ScheduleDateRangeValidationResult {
+  const startClean = startDate?.trim() || "";
+  const endClean = endDate?.trim() || "";
+
+  // Unbounded schedules (open-ended) are always valid
+  if (!startClean || !endClean) {
+    return { isValid: true };
+  }
+
+  const matchStart = startClean.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const matchEnd = endClean.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (!matchStart || !matchEnd) {
+    return { isValid: true };
+  }
+
+  const startUtc = Date.UTC(Number(matchStart[1]), Number(matchStart[2]) - 1, Number(matchStart[3]));
+  const endUtc = Date.UTC(Number(matchEnd[1]), Number(matchEnd[2]) - 1, Number(matchEnd[3]));
+
+  // 1. Order check
+  if (startUtc > endUtc) {
+    return {
+      isValid: false,
+      error: "Tanggal selesai harus sama atau setelah tanggal mulai.",
+    };
+  }
+
+  // 2. Inclusion check
+  if (!doesDateRangeIncludeDay(dayOfWeek, startClean, endClean)) {
+    const dayName = DAY_LABELS[dayOfWeek] || "yang dipilih";
+    return {
+      isValid: false,
+      error: `Rentang tanggal tidak mencakup satu pun hari ${dayName}. Pastikan rentang tanggal mencakup setidaknya satu hari ${dayName}.`,
+    };
+  }
+
+  return { isValid: true };
+}

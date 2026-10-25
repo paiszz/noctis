@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Modal, Button, Select, TimePicker, DatePicker } from "@/components/ui";
 import type { SelectOption } from "@/components/ui";
 import { useData } from "@/lib/data-context";
-import { DAY_LABELS } from "@/types";
+import { DAY_LABELS, validateScheduleDateRange } from "@/types";
 import type { CourseSchedule, DayOfWeek } from "@/types";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
@@ -86,8 +86,9 @@ export function ScheduleFormModal({
       newErrors.time = "Jam selesai harus lebih akhir daripada jam mulai.";
     }
 
-    if (startDate && endDate && endDate < startDate) {
-      newErrors.date = "Tanggal selesai harus sama atau setelah tanggal mulai.";
+    const dateValidation = validateScheduleDateRange(dayOfWeek, startDate, endDate);
+    if (!dateValidation.isValid) {
+      newErrors.date = dateValidation.error;
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -203,7 +204,10 @@ export function ScheduleFormModal({
             <Select<DayOfWeek>
               id="sched-day"
               value={dayOfWeek}
-              onChange={(val) => setDayOfWeek(Number(val) as DayOfWeek)}
+              onChange={(val) => {
+                setDayOfWeek(Number(val) as DayOfWeek);
+                if (errors.date) setErrors((prev) => ({ ...prev, date: undefined }));
+              }}
               options={DAY_OPTIONS}
               variant="muted"
               className="w-full"

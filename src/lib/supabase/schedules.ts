@@ -1,4 +1,5 @@
 import { createClient as createBrowserClient } from "./client";
+import { validateScheduleDateRange } from "@/types";
 import type { CourseSchedule, DayOfWeek } from "@/types";
 import type { ScheduleInput } from "@/lib/data-context";
 import type { SupabaseResult } from "./profile";
@@ -90,6 +91,18 @@ export async function createUserSchedule(
   }
 
   try {
+    const validation = validateScheduleDateRange(
+      input.day_of_week,
+      input.start_date,
+      input.end_date
+    );
+    if (!validation.isValid) {
+      return {
+        data: null,
+        error: new Error(validation.error || "Rentang tanggal jadwal tidak valid."),
+      };
+    }
+
     const nowISO = new Date().toISOString();
     const payload = {
       user_id: userId,
@@ -142,6 +155,24 @@ export async function updateUserSchedule(
   }
 
   try {
+    if (
+      updates.day_of_week !== undefined &&
+      updates.start_date !== undefined &&
+      updates.end_date !== undefined
+    ) {
+      const validation = validateScheduleDateRange(
+        updates.day_of_week,
+        updates.start_date,
+        updates.end_date
+      );
+      if (!validation.isValid) {
+        return {
+          data: null,
+          error: new Error(validation.error || "Rentang tanggal jadwal tidak valid."),
+        };
+      }
+    }
+
     const payload: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
