@@ -8,16 +8,61 @@ function toJakartaDate(date = new Date()) {
   return new Date(d.toLocaleString("en-US", { timeZone: JAKARTA_TIMEZONE }));
 }
 
+function isScheduleActiveOnDate(schedule, targetDate) {
+  if (!schedule) return false;
+
+  let dateStr;
+  let dayOfWeek;
+
+  if (targetDate instanceof Date) {
+    if (isNaN(targetDate.getTime())) return false;
+    const pad = (n) => String(n).padStart(2, "0");
+    dateStr = `${targetDate.getFullYear()}-${pad(targetDate.getMonth() + 1)}-${pad(targetDate.getDate())}`;
+    dayOfWeek = targetDate.getDay();
+  } else if (typeof targetDate === "string") {
+    const match = targetDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) return false;
+    dateStr = `${match[1]}-${match[2]}-${match[3]}`;
+    const [y, m, d] = [Number(match[1]), Number(match[2]), Number(match[3])];
+    const parsedDate = new Date(y, m - 1, d);
+    dayOfWeek = parsedDate.getDay();
+  } else {
+    return false;
+  }
+
+  // 1. Hari kuliah harus cocok
+  if (schedule.day_of_week !== dayOfWeek) {
+    return false;
+  }
+
+  // 2. Batas awal (start_date)
+  if (schedule.start_date && schedule.start_date.trim()) {
+    const startStr = schedule.start_date.trim().slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(startStr) && dateStr < startStr) {
+      return false;
+    }
+  }
+
+  // 3. Batas akhir (end_date)
+  if (schedule.end_date && schedule.end_date.trim()) {
+    const endStr = schedule.end_date.trim().slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(endStr) && dateStr > endStr) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function determineNextUpActivity(schedules, agendaEvents, now = toJakartaDate(new Date())) {
   const currentTime = now.getTime();
-  const todayDay = now.getDay();
   const pad = (n) => String(n).padStart(2, "0");
   const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 
   const candidates = [];
 
-  // 1. Course Schedules for today
-  const todaySchedules = schedules.filter((s) => s.day_of_week === todayDay);
+  // 1. Course Schedules for today (respecting day_of_week, start_date, and end_date)
+  const todaySchedules = schedules.filter((s) => isScheduleActiveOnDate(s, now));
   for (const s of todaySchedules) {
     if (!s.start_time || !s.end_time) continue;
 
@@ -272,6 +317,143 @@ for (const tz of timezones) {
     assert.strictEqual(result, null, "Harus null saat semua kegiatan telah selesai");
     console.log("  ✓ Skenario Empty State: Mengembalikan null secara bersih jika tidak ada kegiatan aktif/mendatang.");
   }
+}
+
+// =====================================================================
+// PENGUJIAN FILTER RENTANG TANGGAL JADWAL (start_date & end_date)
+// =====================================================================
+console.log("\n=== Menjalankan Pengujian Filter Rentang Tanggal Jadwal pada Next Up ===");
+
+// Target tanggal uji: Sabtu, 24 Oktober 2026 (day_of_week: 6)
+// Waktu pengujian: 07:00 WIB
+const testNowDate = new Date(Date.UTC(2026, 9, 24, 7 - 7, 0, 0, 0)); // 07:00 WIB
+const testNow = toJakartaDate(testNowDate);
+assert.strictEqual(testNow.getDay(), 6, "Hari uji harus hari Sabtu (6)");
+
+// 1. Jadwal dengan start_date di masa depan (2026-10-31) tidak boleh muncul pada 2026-10-24
+{
+  const futureSchedule = {
+    id: "sched-future",
+    day_of_week: 6,
+    course_name: "Jadwal Belum Dimulai",
+    start_time: "08:00",
+    end_time: "10:00",
+    start_date: "2026-10-31",
+    end_date: "2026-12-31",
+  };
+  const result = determineNextUpActivity([futureSchedule], [], testNow);
+  assert.strictEqual(result, null, "Jadwal dengan start_date di masa depan tidak boleh muncul");
+  console.log("  ✓ Lolos 1: Jadwal dengan start_date di masa depan tidak muncul sebelum tanggal mulai.");
+}
+
+// 2. Jadwal dengan end_date di masa lalu (2026-10-17) tidak boleh muncul pada 2026-10-24
+{
+  const expiredSchedule = {
+    id: "sched-expired",
+    day_of_week: 6,
+    course_name: "Jadwal Telah Berakhir",
+    start_time: "08:00",
+    end_time: "10:00",
+    start_date: "2026-08-01",
+    end_date: "2026-10-17",
+  };
+  const result = determineNextUpActivity([expiredSchedule], [], testNow);
+  assert.strictEqual(result, null, "Jadwal dengan end_date di masa lalu tidak boleh muncul");
+  console.log("  ✓ Lolos 2: Jadwal dengan end_date di masa lalu tidak muncul setelah tanggal berakhir.");
+}
+
+// 3a. Jadwal tepat pada start_date (inklusif batas awal: 2026-10-24)
+{
+  const startDateSchedule = {
+    id: "sched-start-inclusive",
+    day_of_week: 6,
+    course_name: "Kuliah Perdana",
+    start_time: "08:00",
+    end_time: "10:00",
+    start_date: "2026-10-24",
+    end_date: "2026-12-31",
+  };
+  const result = determineNextUpActivity([startDateSchedule], [], testNow);
+  assert.ok(result, "Jadwal tepat pada start_date harus muncul");
+  assert.strictEqual(result.title, "Kuliah Perdana");
+  console.log("  ✓ Lolos 3a: Jadwal tepat pada start_date tetap aktif (batas awal inklusif).");
+}
+
+// 3b. Jadwal tepat pada end_date (inklusif batas akhir: 2026-10-24)
+{
+  const endDateSchedule = {
+    id: "sched-end-inclusive",
+    day_of_week: 6,
+    course_name: "Kuliah Terakhir",
+    start_time: "08:00",
+    end_time: "10:00",
+    start_date: "2026-08-01",
+    end_date: "2026-10-24",
+  };
+  const result = determineNextUpActivity([endDateSchedule], [], testNow);
+  assert.ok(result, "Jadwal tepat pada end_date harus muncul");
+  assert.strictEqual(result.title, "Kuliah Terakhir");
+  console.log("  ✓ Lolos 3b: Jadwal tepat pada end_date tetap aktif (batas akhir inklusif).");
+}
+
+// 4. Jadwal yang berada dalam rentang tanggal aktif dan cocok hari mingguan
+{
+  const activeSchedule = {
+    id: "sched-in-range",
+    day_of_week: 6,
+    course_name: "Sistem Terdistribusi",
+    start_time: "08:00",
+    end_time: "10:00",
+    start_date: "2026-10-01",
+    end_date: "2026-11-30",
+  };
+  const result = determineNextUpActivity([activeSchedule], [], testNow);
+  assert.ok(result, "Jadwal dalam rentang aktif harus muncul");
+  assert.strictEqual(result.title, "Sistem Terdistribusi");
+  console.log("  ✓ Lolos 4: Jadwal yang masih dalam rentang tanggal dan cocok hari mingguan tetap muncul.");
+}
+
+// 5. Jadwal lama (legacy) tanpa start_date dan end_date tetap aktif
+{
+  const legacySchedule = {
+    id: "sched-legacy",
+    day_of_week: 6,
+    course_name: "Jadwal Legacy Tanpa Batas",
+    start_time: "08:00",
+    end_time: "10:00",
+    start_date: null,
+    end_date: null,
+  };
+  const result = determineNextUpActivity([legacySchedule], [], testNow);
+  assert.ok(result, "Jadwal legacy tanpa tanggal harus tetap aktif");
+  assert.strictEqual(result.title, "Jadwal Legacy Tanpa Batas");
+  console.log("  ✓ Lolos 5: Jadwal lama tanpa start_date dan end_date tetap berfungsi normal.");
+}
+
+// 6. Interaksi Next Up: Jadwal masa depan tidak menghalangi Agenda yang valid hari ini
+{
+  const futureSchedule = {
+    id: "sched-future-2",
+    day_of_week: 6,
+    course_name: "Jadwal Belum Mulai Jam 08:00",
+    start_time: "08:00",
+    end_time: "10:00",
+    start_date: "2026-11-01",
+    end_date: "2026-12-31",
+  };
+  const todayAgenda = {
+    id: "agenda-today-0900",
+    title: "Workshop Desain UI",
+    start_at: new Date(Date.UTC(2026, 9, 24, 9 - 7, 0, 0, 0)).toISOString(), // 09:00 WIB
+    end_at: new Date(Date.UTC(2026, 9, 24, 11 - 7, 0, 0, 0)).toISOString(),  // 11:00 WIB
+  };
+  // Pukul 07:00 WIB, jadwal 08:00 tidak valid karena start_date di masa depan.
+  // Next Up harus memilih agenda 09:00 secara tepat.
+  const result = determineNextUpActivity([futureSchedule], [todayAgenda], testNow);
+  assert.ok(result, "Harus memilih Agenda yang valid");
+  assert.strictEqual(result.title, "Workshop Desain UI");
+  assert.strictEqual(result.type, "Agenda");
+  console.log("  ✓ Lolos 6: Jadwal di luar rentang tanggal diabaikan dan Agenda valid terpilih sebagai Next Up.");
 }
 
 console.log("\n Semua pengujian Next Up berhasil 100%!");

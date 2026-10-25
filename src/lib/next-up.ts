@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import { toTimezoneDate, DEFAULT_TIMEZONE } from "@/lib/date";
-import type { CourseSchedule, AgendaEvent, DayOfWeek } from "@/types";
+import { isScheduleActiveOnDate } from "@/types";
+import type { CourseSchedule, AgendaEvent } from "@/types";
 
 export interface NextUpActivity {
   id: string;
@@ -37,13 +38,12 @@ export function determineNextUpActivity(
 ): NextUpActivity | null {
   const effectiveNow = now ?? toTimezoneDate(new Date(), timezone);
   const currentTime = effectiveNow.getTime();
-  const todayDay = effectiveNow.getDay() as DayOfWeek;
   const todayStr = format(effectiveNow, "yyyy-MM-dd");
 
   const candidates: NextUpActivity[] = [];
 
-  // 1. Course Schedules for today
-  const todaySchedules = schedules.filter((s) => s.day_of_week === todayDay);
+  // 1. Course Schedules for today (respecting day_of_week and start_date/end_date range)
+  const todaySchedules = schedules.filter((s) => isScheduleActiveOnDate(s, effectiveNow));
   for (const s of todaySchedules) {
     if (!s.start_time || !s.end_time) continue;
 

@@ -28,7 +28,13 @@ import { Card, Badge, Button, priorityVariant } from "@/components/ui";
 import { useData } from "@/lib/data-context";
 import { useAuth } from "@/lib/auth-context";
 import { toTimezoneDate, DEFAULT_TIMEZONE } from "@/lib/date";
-import { isOverdue, isUpcomingAgenda, isPastAgenda, PRIORITY_LABELS } from "@/types";
+import {
+  isOverdue,
+  isUpcomingAgenda,
+  isPastAgenda,
+  isScheduleActiveOnDate,
+  PRIORITY_LABELS,
+} from "@/types";
 import type { DayOfWeek, CourseSchedule, Task, AgendaEvent, Note } from "@/types";
 import { determineNextUpActivity } from "@/lib/next-up";
 import { toast } from "sonner";
@@ -86,9 +92,8 @@ export function DashboardContent() {
 
   // ── Today Schedules ──
   const todaySchedules = useMemo(() => {
-    const today = now.getDay() as DayOfWeek;
     return schedules
-      .filter((s) => s.day_of_week === today)
+      .filter((s) => isScheduleActiveOnDate(s, now))
       .sort((a, b) => a.start_time.localeCompare(b.start_time));
   }, [schedules, now]);
 
