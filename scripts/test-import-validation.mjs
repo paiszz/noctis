@@ -1,11 +1,46 @@
 import assert from "node:assert";
-import {
+import { register } from "node:module";
+import path from "node:path";
+import fs from "node:fs";
+import { pathToFileURL } from "node:url";
+
+// Register custom resolve hook for @/ path aliases in Node.js test environment
+const hookCode = `
+import path from "node:path";
+import fs from "node:fs";
+import { pathToFileURL } from "node:url";
+
+export async function resolve(specifier, context, nextResolve) {
+  if (specifier === "@/types" || specifier.startsWith("@/types/")) {
+    const sub = specifier.replace(/^@\\/types\\/?/, "");
+    const filePath = sub ? path.resolve(process.cwd(), "src/types", sub + ".ts") : path.resolve(process.cwd(), "src/types/index.ts");
+    if (fs.existsSync(filePath)) {
+      return { url: pathToFileURL(filePath).href, shortCircuit: true };
+    }
+  }
+  if (specifier.startsWith("@/")) {
+    const sub = specifier.slice(2);
+    const candidate = path.resolve(process.cwd(), "src", sub);
+    if (fs.existsSync(candidate + ".ts")) {
+      return { url: pathToFileURL(candidate + ".ts").href, shortCircuit: true };
+    }
+    if (fs.existsSync(path.resolve(candidate, "index.ts"))) {
+      return { url: pathToFileURL(path.resolve(candidate, "index.ts")).href, shortCircuit: true };
+    }
+  }
+  return nextResolve(specifier, context);
+}
+`;
+register("data:text/javascript," + encodeURIComponent(hookCode));
+
+const schemaPath = pathToFileURL(path.resolve(process.cwd(), "src/lib/validation/import-schema.ts")).href;
+const {
   noctisExportSchema,
   taskImportSchema,
   scheduleImportSchema,
   noteImportSchema,
   agendaImportSchema,
-} from "../src/lib/validation/import-schema.ts";
+} = await import(schemaPath);
 
 console.log("=== Menjalankan Pengujian Stage 6.1 — Validasi Schema & Pemetaan ID ===\n");
 
@@ -812,6 +847,33 @@ console.log("[Test 17] Pre-validasi SQL: Payload tidak valid ditolak sebelum DEL
         if (!s.start_time || !s.start_time.match(/^([01][0-9]|2[0-3]):[0-5][0-9]$/)) throw new Error("Invalid schedule start_time");
         if (!s.end_time || !s.end_time.match(/^([01][0-9]|2[0-3]):[0-5][0-9]$/)) throw new Error("Invalid schedule end_time");
         if (s.start_time >= s.end_time) throw new Error("Invalid schedule time: start_time must be earlier than end_time");
+
+        // Validate date range if both dates provided
+        if (s.start_date && s.end_date) {
+          const matchStart = String(s.start_date).match(/^(\d{4})-(\d{2})-(\d{2})/);
+          const matchEnd = String(s.end_date).match(/^(\d{4})-(\d{2})-(\d{2})/);
+          if (matchStart && matchEnd) {
+            const startUtc = Date.UTC(Number(matchStart[1]), Number(matchStart[2]) - 1, Number(matchStart[3]));
+            const endUtc = Date.UTC(Number(matchEnd[1]), Number(matchEnd[2]) - 1, Number(matchEnd[3]));
+            if (startUtc > endUtc) {
+              throw new Error(`Invalid schedule date range: start_date (${s.start_date}) must be on or before end_date (${s.end_date})`);
+            }
+            const msPerDay = 24 * 60 * 60 * 1000;
+            const diffDays = Math.round((endUtc - startUtc) / msPerDay);
+            if (diffDays < 6) {
+              let includesDay = false;
+              for (let t = startUtc; t <= endUtc; t += msPerDay) {
+                if (new Date(t).getUTCDay() === s.day_of_week) {
+                  includesDay = true;
+                  break;
+                }
+              }
+              if (!includesDay) {
+                throw new Error(`Invalid schedule date range: range [${s.start_date} to ${s.end_date}] does not include day_of_week ${s.day_of_week}`);
+              }
+            }
+          }
+        }
       }
     }
 
@@ -848,6 +910,10 @@ console.log("[Test 17] Pre-validasi SQL: Payload tidak valid ditolak sebelum DEL
 
   // Uji penolakan pre-validation
   assert.throws(() => simulateSqlPreValidation({ schedules: [{ course_name: "K", day_of_week: 1, start_time: "10:00", end_time: "09:00" }] }));
+  assert.throws(() => simulateSqlPreValidation({ schedules: [{ course_name: "K", day_of_week: 1, start_time: "08:00", end_time: "09:40", start_date: "2026-10-25", end_date: "2026-10-19" }] }));
+  assert.throws(() => simulateSqlPreValidation({ schedules: [{ course_name: "K", day_of_week: 1, start_time: "08:00", end_time: "09:40", start_date: "2026-10-20", end_date: "2026-10-22" }] }));
+  assert.doesNotThrow(() => simulateSqlPreValidation({ schedules: [{ course_name: "K", day_of_week: 1, start_time: "08:00", end_time: "09:40", start_date: "2026-10-19", end_date: "2026-10-25" }] }));
+  assert.doesNotThrow(() => simulateSqlPreValidation({ schedules: [{ course_name: "K", day_of_week: 1, start_time: "08:00", end_time: "09:40", start_date: null, end_date: null }] }));
   assert.throws(() => simulateSqlPreValidation({ tasks: [{ title: "", priority: "high", status: "todo" }] }));
   assert.throws(() => simulateSqlPreValidation({ tasks: [{ title: "T", priority: "super-high", status: "todo" }] }));
   assert.throws(() => simulateSqlPreValidation({ agenda_events: [{ title: "A", start_at: "2026-10-25T10:00:00Z", end_at: "2026-10-25T09:00:00Z" }] }));
@@ -1328,6 +1394,166 @@ console.log("[Test 23] Semantik Array JSON Null: tasks, schedules, notes, agenda
   console.log("  ✓ Lolos: Isolasi logout dan pergantian akun menjamin nol kebocoran data antar-sesi.\n");
 }
 
+// ── TEST 26: Validasi Rentang Tanggal Jadwal pada Fitur Impor (Tahap 2) ──
+console.log("[Test 26] Validasi Rentang Tanggal Jadwal pada Skema Impor JSON (Tahap 2)");
+{
+  const baseSchedule = {
+    id: "sched-t2",
+    course_name: "Struktur Data & Algoritma",
+    course_code: "CS101",
+    day_of_week: 1, // Senin
+    start_time: "08:00",
+    end_time: "09:40",
+  };
+
+  // 1. Rentang valid yang mencakup hari jadwal (Senin 19 Okt s.d. Minggu 25 Okt 2026)
+  const res1 = scheduleImportSchema.safeParse({
+    ...baseSchedule,
+    start_date: "2026-10-19",
+    end_date: "2026-10-25",
+  });
+  assert.strictEqual(res1.success, true, "1: Rentang valid yang mencakup hari Senin harus lolos");
+
+  // 2. Rentang panjang tujuh hari atau lebih (Okt 2026 penuh, day_of_week: 3 / Rabu)
+  const res2 = scheduleImportSchema.safeParse({
+    ...baseSchedule,
+    day_of_week: 3,
+    start_date: "2026-10-01",
+    end_date: "2026-10-31",
+  });
+  assert.strictEqual(res2.success, true, "2: Rentang >= 7 hari selalu memuat semua hari mingguan dan harus lolos");
+
+  // 3. Satu hari yang cocok dengan day_of_week (19 Okt 2026 = Senin, start_date === end_date)
+  const res3 = scheduleImportSchema.safeParse({
+    ...baseSchedule,
+    day_of_week: 1,
+    start_date: "2026-10-19",
+    end_date: "2026-10-19",
+  });
+  assert.strictEqual(res3.success, true, "3: Tanggal tunggal yang persis hari Senin harus lolos");
+
+  // 4. start_date > end_date ditolak
+  const res4 = scheduleImportSchema.safeParse({
+    ...baseSchedule,
+    start_date: "2026-10-25",
+    end_date: "2026-10-19",
+  });
+  assert.strictEqual(res4.success, false, "4: start_date > end_date harus ditolak");
+  assert.strictEqual(
+    res4.error?.issues[0]?.message.includes("Tanggal selesai harus sama atau setelah tanggal mulai"),
+    true,
+    "4: Pesan error harus menyatakan tanggal selesai harus sama atau setelah tanggal mulai"
+  );
+
+  // 5. Rentang tidak mencakup hari jadwal ditolak (Selasa 20 Okt s.d. Kamis 22 Okt untuk jadwal Senin)
+  const res5 = scheduleImportSchema.safeParse({
+    ...baseSchedule,
+    day_of_week: 1,
+    start_date: "2026-10-20",
+    end_date: "2026-10-22",
+  });
+  assert.strictEqual(res5.success, false, "5: Rentang tanpa hari Senin harus ditolak");
+  assert.strictEqual(
+    res5.error?.issues[0]?.message.includes("Rentang tanggal tidak mencakup satu pun hari Senin"),
+    true,
+    "5: Pesan error harus menyebutkan nama hari yang tidak tercakup"
+  );
+
+  // 6. Tanggal tunggal yang tidak cocok ditolak (Selasa 20 Okt untuk jadwal Senin)
+  const res6 = scheduleImportSchema.safeParse({
+    ...baseSchedule,
+    day_of_week: 1,
+    start_date: "2026-10-20",
+    end_date: "2026-10-20",
+  });
+  assert.strictEqual(res6.success, false, "6: Tanggal tunggal yang bukan hari Senin harus ditolak");
+
+  // 7. Kedua tanggal null, keduanya tidak diberikan, atau keduanya kosong sesuai kontrak schema yang ada
+  const res7a = scheduleImportSchema.safeParse({
+    ...baseSchedule,
+    start_date: null,
+    end_date: null,
+  });
+  assert.strictEqual(res7a.success, true, "7a: Kedua tanggal null harus lolos (jadwal terbuka)");
+
+  const res7b = scheduleImportSchema.safeParse({
+    ...baseSchedule,
+  });
+  assert.strictEqual(res7b.success, true, "7b: Kedua tanggal tidak diberikan harus lolos");
+
+  const res7c = scheduleImportSchema.safeParse({
+    ...baseSchedule,
+    start_date: "",
+    end_date: "",
+  });
+  assert.strictEqual(res7c.success, true, "7c: Kedua tanggal string kosong harus lolos");
+
+  // 8. Hanya start_date atau hanya end_date yang diberikan
+  const res8a = scheduleImportSchema.safeParse({
+    ...baseSchedule,
+    start_date: "2026-10-19",
+    end_date: null,
+  });
+  assert.strictEqual(res8a.success, true, "8a: Hanya start_date yang diisi harus lolos (unbounded end)");
+
+  const res8b = scheduleImportSchema.safeParse({
+    ...baseSchedule,
+    start_date: null,
+    end_date: "2026-10-25",
+  });
+  assert.strictEqual(res8b.success, true, "8b: Hanya end_date yang diisi harus lolos (unbounded start)");
+
+  // 9. Data impor lama yang valid tetap diterima pada level noctisExportSchema
+  const legacyBackup = {
+    version: "1.0.0",
+    data: {
+      schedules: [
+        {
+          id: "sched-legacy-1",
+          course_name: "Fisika Dasar",
+          day_of_week: 2, // Selasa
+          start_time: "10:00",
+          end_time: "11:40",
+          // start_date & end_date tidak ada sama sekali
+        },
+      ],
+    },
+  };
+  const res9 = noctisExportSchema.safeParse(legacyBackup);
+  assert.strictEqual(res9.success, true, "9: Data impor lama tanpa tanggal harus tetap diterima 100%");
+
+  // 10. Satu jadwal tidak valid menyebabkan seluruh berkas ditolak sebelum impor dimulai
+  const poisonedBackup = {
+    version: "1.0.0",
+    data: {
+      schedules: [
+        {
+          id: "sched-ok",
+          course_name: "Kalkulus",
+          day_of_week: 1,
+          start_time: "08:00",
+          end_time: "09:40",
+          start_date: "2026-10-19",
+          end_date: "2026-10-25",
+        },
+        {
+          id: "sched-bad",
+          course_name: "Algoritma",
+          day_of_week: 1, // Senin
+          start_time: "10:00",
+          end_time: "11:40",
+          start_date: "2026-10-25", // Tanggal terbalik!
+          end_date: "2026-10-19",
+        },
+      ],
+    },
+  };
+  const res10 = noctisExportSchema.safeParse(poisonedBackup);
+  assert.strictEqual(res10.success, false, "10: Satu saja jadwal cacat harus menolak seluruh file backup secara atomik");
+
+  console.log("  ✓ Lolos: Seluruh 11 skenario pengujian validasi rentang jadwal impor berhasil 100%.\n");
+}
+
 console.log("==============================================================================");
-console.log("SEMUA PENGUJIAN STAGE 6.1, STAGE 6.2, & PERBAIKAN LOGOUT BERHASIL 100%!");
+console.log("SEMUA PENGUJIAN STAGE 6.1, STAGE 6.2, & TAHAP 2 BERHASIL 100%!");
 console.log("==============================================================================");

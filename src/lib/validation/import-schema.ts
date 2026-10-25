@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { validateScheduleDateRange, type DayOfWeek } from "@/types/schedule";
 
 const optionalString = z
   .string()
@@ -98,10 +99,26 @@ export const scheduleImportSchema = z.object({
   end_date: optionalString,
   created_at: optionalDateString.default(() => new Date().toISOString()),
   updated_at: optionalDateString.default(() => new Date().toISOString()),
-}).refine((data) => data.start_time < data.end_time, {
-  message: "Waktu mulai jadwal kuliah harus lebih awal dari waktu selesai",
-  path: ["end_time"],
-});
+})
+  .refine((data) => data.start_time < data.end_time, {
+    message: "Waktu mulai jadwal kuliah harus lebih awal dari waktu selesai",
+    path: ["end_time"],
+  })
+  .superRefine((data, ctx) => {
+    const result = validateScheduleDateRange(
+      data.day_of_week as DayOfWeek,
+      data.start_date,
+      data.end_date
+    );
+    if (!result.isValid) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: result.error || "Rentang tanggal jadwal kuliah tidak valid",
+        path: ["end_date"],
+      });
+    }
+  });
+
 
 export const agendaImportSchema = z
   .object({
