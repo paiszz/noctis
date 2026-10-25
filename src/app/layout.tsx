@@ -11,7 +11,10 @@ const urbanist = Urbanist({
 });
 
 export const viewport: Viewport = {
-  themeColor: "#0F766E",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#7A7AFF" },
+    { media: "(prefers-color-scheme: dark)", color: "#0F0F19" },
+  ],
   width: "device-width",
   initialScale: 1,
 };
