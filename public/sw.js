@@ -19,33 +19,116 @@ const OFFLINE_FALLBACK_HTML = `<!DOCTYPE html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#0F766E" />
+  <meta name="theme-color" content="#7A7AFF" />
   <title>Offline — Noctis</title>
+  <script>
+    (function(){
+      try {
+        var t = null;
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          if (k && k.indexOf('noctis_user_') === 0 && k.indexOf('_preferences_v1') !== -1) {
+            var r = localStorage.getItem(k);
+            if (r) {
+              var p = JSON.parse(r);
+              if (p && p.theme) { t = p.theme; break; }
+            }
+          }
+        }
+        if (!t) {
+          var rg = localStorage.getItem('noctis_storage_preferences_v1');
+          if (rg) {
+            var pg = JSON.parse(rg);
+            if (pg && pg.theme) { t = pg.theme; }
+          }
+        }
+        var isDark = t === 'dark' || ((t === 'system' || !t) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (isDark) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+          if (t === 'light') {
+            document.documentElement.classList.add('light');
+          }
+        }
+      } catch(e) {}
+    })();
+  </script>
   <style>
     :root {
-      --bg: #F7F8F6;
+      --bg: #FFFFFF;
+      --bg-gradient:
+        radial-gradient(ellipse 100% 800px at 50% -40px, rgba(122, 122, 255, 0.24) 0%, rgba(155, 145, 255, 0.13) 35%, rgba(195, 185, 255, 0.05) 65%, rgba(225, 220, 255, 0.02) 85%, transparent 100%),
+        radial-gradient(ellipse 75% 700px at 85% -30px, rgba(135, 120, 255, 0.16) 0%, rgba(165, 150, 255, 0.08) 40%, rgba(205, 195, 255, 0.02) 75%, transparent 100%),
+        linear-gradient(180deg, #E6E0FF 0%, #EDE8FE 25%, #F4F1FE 55%, #F9F8FE 80%, #FFFFFF 100%);
       --surface: #FFFFFF;
-      --primary: #0F766E;
-      --primary-dark: #115E59;
-      --soft-accent: #E8F3EF;
-      --text: #202923;
-      --muted: #69746C;
-      --border: rgba(15, 118, 110, 0.15);
-      --card-shadow: 0 10px 30px -5px rgba(15, 118, 110, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.03);
+      --surface-muted: #F8F8FC;
+      --primary: #7A7AFF;
+      --primary-dark: #6366F1;
+      --primary-light: #9B9BFF;
+      --soft-accent: #F0EFFF;
+      --text: #070708;
+      --muted: #ADADAE;
+      --muted-dark: #6B7280;
+      --border: #EAEAF2;
+      --border-soft: #F2F2F8;
+      --warning: #FFAB2E;
+      --success: #00D589;
+      --card-shadow: 0 4px 20px -2px rgba(122, 122, 255, 0.08), 0 1px 3px rgba(7, 7, 8, 0.02);
+      --logo-shadow: 0 4px 14px rgba(122, 122, 255, 0.35);
+      --btn-shadow: 0 8px 24px rgba(122, 122, 255, 0.35);
     }
+
+    html.dark {
+      --bg: #0F0F19;
+      --bg-gradient:
+        radial-gradient(ellipse 100% 800px at 50% -40px, rgba(122, 122, 255, 0.16) 0%, rgba(99, 102, 241, 0.07) 40%, rgba(99, 102, 241, 0.02) 75%, transparent 100%),
+        radial-gradient(ellipse 75% 700px at 85% -30px, rgba(135, 120, 255, 0.10) 0%, rgba(135, 120, 255, 0.03) 50%, transparent 100%),
+        linear-gradient(180deg, #18182A 0px, #141424 280px, #11111E 560px, #0F0F19 900px);
+      --surface: #151522;
+      --surface-muted: #1B1B2C;
+      --primary: #7A7AFF;
+      --primary-dark: #6366F1;
+      --primary-light: #9B9BFF;
+      --soft-accent: #262644;
+      --text: #F4F4FD;
+      --muted: #8E8EA8;
+      --muted-dark: #A5A5C2;
+      --border: #2A2A40;
+      --border-soft: #202032;
+      --warning: #FFAB2E;
+      --success: #00D589;
+      --card-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5), 0 0 0 1px #2A2A40;
+      --logo-shadow: 0 4px 14px rgba(122, 122, 255, 0.45);
+      --btn-shadow: 0 8px 24px rgba(122, 122, 255, 0.35);
+    }
+
     @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0C130F;
-        --surface: #141D18;
-        --primary: #14B8A6;
-        --primary-dark: #0F766E;
-        --soft-accent: rgba(20, 184, 166, 0.15);
-        --text: #F0F4F1;
-        --muted: #94A399;
-        --border: rgba(20, 184, 166, 0.2);
-        --card-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
+      html:not(.light) {
+        --bg: #0F0F19;
+        --bg-gradient:
+          radial-gradient(ellipse 100% 800px at 50% -40px, rgba(122, 122, 255, 0.16) 0%, rgba(99, 102, 241, 0.07) 40%, rgba(99, 102, 241, 0.02) 75%, transparent 100%),
+          radial-gradient(ellipse 75% 700px at 85% -30px, rgba(135, 120, 255, 0.10) 0%, rgba(135, 120, 255, 0.03) 50%, transparent 100%),
+          linear-gradient(180deg, #18182A 0px, #141424 280px, #11111E 560px, #0F0F19 900px);
+        --surface: #151522;
+        --surface-muted: #1B1B2C;
+        --primary: #7A7AFF;
+        --primary-dark: #6366F1;
+        --primary-light: #9B9BFF;
+        --soft-accent: #262644;
+        --text: #F4F4FD;
+        --muted: #8E8EA8;
+        --muted-dark: #A5A5C2;
+        --border: #2A2A40;
+        --border-soft: #202032;
+        --warning: #FFAB2E;
+        --success: #00D589;
+        --card-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5), 0 0 0 1px #2A2A40;
+        --logo-shadow: 0 4px 14px rgba(122, 122, 255, 0.45);
+        --btn-shadow: 0 8px 24px rgba(122, 122, 255, 0.35);
       }
     }
+
     * {
       box-sizing: border-box;
       margin: 0;
@@ -54,6 +137,9 @@ const OFFLINE_FALLBACK_HTML = `<!DOCTYPE html>
     body {
       font-family: "Urbanist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background-color: var(--bg);
+      background-image: var(--bg-gradient);
+      background-attachment: fixed;
+      background-repeat: no-repeat;
       color: var(--text);
       display: flex;
       flex-direction: column;
@@ -74,11 +160,11 @@ const OFFLINE_FALLBACK_HTML = `<!DOCTYPE html>
       width: 44px;
       height: 44px;
       border-radius: 14px;
-      background: linear-gradient(135deg, #0F766E 0%, #115E59 100%);
+      background: linear-gradient(135deg, #7A7AFF 0%, #6366F1 100%);
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 4px 12px rgba(15, 118, 110, 0.25);
+      box-shadow: var(--logo-shadow);
     }
     .brand-name {
       font-size: 22px;
@@ -142,14 +228,14 @@ const OFFLINE_FALLBACK_HTML = `<!DOCTYPE html>
     }
     p {
       font-size: 14px;
-      color: var(--muted);
+      color: var(--muted-dark);
       line-height: 1.6;
       margin-bottom: 24px;
       max-width: 360px;
     }
     .status-box {
       font-size: 12px;
-      color: var(--muted);
+      color: var(--muted-dark);
       margin-bottom: 20px;
       display: flex;
       align-items: center;
@@ -159,11 +245,11 @@ const OFFLINE_FALLBACK_HTML = `<!DOCTYPE html>
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: #D97706;
+      background: var(--warning);
       display: inline-block;
     }
     .status-dot.online {
-      background: #10B981;
+      background: var(--success);
     }
     .btn {
       display: inline-flex;
@@ -179,13 +265,13 @@ const OFFLINE_FALLBACK_HTML = `<!DOCTYPE html>
       border-radius: 9999px;
       cursor: pointer;
       transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
-      box-shadow: 0 2px 8px rgba(15, 118, 110, 0.25);
+      box-shadow: var(--btn-shadow);
       text-decoration: none;
       width: 100%;
     }
     .btn:hover {
       background: var(--primary-dark);
-      box-shadow: 0 4px 14px rgba(15, 118, 110, 0.35);
+      box-shadow: 0 10px 28px rgba(122, 122, 255, 0.45);
     }
     .btn:active {
       transform: scale(0.98);
