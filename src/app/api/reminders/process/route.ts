@@ -13,9 +13,15 @@ const schedulerQuerySchema = z.object({
  * Executes due reminder batch processing.
  */
 async function handleProcessRequest(request: NextRequest) {
+  const requestReceivedAt = Date.now();
+  const requestIso = new Date(requestReceivedAt).toISOString();
+
   // 1. Verify scheduler authentication
   const authCheck = verifySchedulerAuth(request);
   if (!authCheck.authorized) {
+    console.warn(
+      `[Reminder Scheduler] Unauthorized access attempt at ${requestIso}: ${authCheck.error}`
+    );
     return NextResponse.json(
       { error: authCheck.error },
       { status: authCheck.status || 401 }
@@ -63,10 +69,17 @@ async function handleProcessRequest(request: NextRequest) {
     batchSize: validation.data.batch_size,
     staleTimeoutMinutes: validation.data.stale_timeout_minutes,
     maxAttempts: validation.data.max_attempts,
+    requestReceivedAt,
   };
 
   // 3. Trigger delivery engine batch execution
   const summary = await processDueReminders(options);
+  const totalDurationMs = Date.now() - requestReceivedAt;
+
+  console.log(
+    `[Reminder Scheduler] Batch executed in ${totalDurationMs}ms (received_at: ${requestIso}): ` +
+    `claimed=${summary.claimed}, sent=${summary.sent}, failed=${summary.failed}, retried=${summary.retried}`
+  );
 
   return NextResponse.json(
     {

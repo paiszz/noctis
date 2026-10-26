@@ -15,6 +15,7 @@ export interface DeliveryOptions {
   batchSize?: number;
   staleTimeoutMinutes?: number;
   maxAttempts?: number;
+  requestReceivedAt?: number;
 }
 
 export interface DeliverySummary {
@@ -86,6 +87,8 @@ export async function processDueReminders(
 
   // 1. Atomically claim due reminders via PostgreSQL RPC
   let claimedReminders: ReminderRecord[] = [];
+  const claimStart = Date.now();
+  let claimMethod = "rpc";
 
   const { data: rpcData, error: rpcError } = await adminClient.rpc(
     "claim_due_reminders",
@@ -97,6 +100,7 @@ export async function processDueReminders(
   );
 
   if (rpcError) {
+    claimMethod = "fallback";
     // If the stored procedure does not exist yet (e.g. pending database migration),
     // provide a graceful, defensive fallback using standard queries.
     console.warn(
@@ -160,15 +164,27 @@ export async function processDueReminders(
     claimedReminders = rpcData as ReminderRecord[];
   }
 
+  const claimDurationMs = Date.now() - claimStart;
   summary.claimed = claimedReminders.length;
+
   if (claimedReminders.length === 0) {
+    const totalIdleMs = options.requestReceivedAt ? Date.now() - options.requestReceivedAt : claimDurationMs;
+    console.log(
+      `[Reminder Delivery] No due reminders claimed (method=${claimMethod}, claim_ms=${claimDurationMs}, total_ms=${totalIdleMs})`
+    );
     return summary;
   }
 
+  console.log(
+    `[Reminder Delivery] Claimed ${claimedReminders.length} reminder(s) in ${claimDurationMs}ms (method=${claimMethod})`
+  );
+
   // 2. Process each claimed reminder in isolation
   for (const reminder of claimedReminders) {
+    const reminderProcessStart = Date.now();
     try {
       // 2.1 Retrieve active push subscriptions for the user
+      const subFetchStart = Date.now();
       interface SubRow {
         id: string;
         endpoint: string;
@@ -181,6 +197,8 @@ export async function processDueReminders(
         .select("id, endpoint, p256dh, auth")
         .eq("user_id", reminder.user_id);
 
+      const subFetchDurationMs = Date.now() - subFetchStart;
+
       if (subError) {
         throw new Error(`Gagal mengambil subscription: ${subError.message}`);
       }
@@ -190,6 +208,7 @@ export async function processDueReminders(
       // Terminal behavior: If user has zero active push subscriptions, permanently mark 'failed'
       if (activeSubs.length === 0) {
         const errorMsg = "Tidak ada Web Push subscription aktif untuk pengguna ini.";
+        const updateStart = Date.now();
         const { data: updatedRows, error: updateError } = await adminClient
           .from("reminders")
           .update({
@@ -202,6 +221,8 @@ export async function processDueReminders(
           .eq("attempts", reminder.attempts)
           .select("id");
 
+        const updateDurationMs = Date.now() - updateStart;
+
         if (updateError) {
           summary.success = false;
           summary.errors.push(
@@ -210,6 +231,18 @@ export async function processDueReminders(
         } else if (updatedRows && updatedRows.length > 0) {
           summary.failed += 1;
           summary.errors.push(`Reminder ${reminder.id}: ${errorMsg}`);
+          console.warn(
+            `[Reminder Delivery] Reminder ${reminder.id} failed (no subscriptions): ` +
+            JSON.stringify({
+              reminder_id: reminder.id,
+              source_type: reminder.source_type,
+              scheduled_at: reminder.scheduled_at,
+              status: "failed",
+              sub_fetch_ms: subFetchDurationMs,
+              update_ms: updateDurationMs,
+              total_item_ms: Date.now() - reminderProcessStart,
+            })
+          );
         } else {
           console.warn(
             `[Reminder Delivery] Reminder ${reminder.id} sudah diambil alih oleh worker lain, abaikan update.`
@@ -233,6 +266,7 @@ export async function processDueReminders(
       };
 
       // 2.3 Dispatch to all user subscriptions
+      const pushDispatchStart = Date.now();
       const sendPromises = activeSubs.map(async (sub) => {
         const keys: PushSubscriptionKeys = {
           endpoint: sub.endpoint,
@@ -244,6 +278,7 @@ export async function processDueReminders(
       });
 
       const settledResults = await Promise.allSettled(sendPromises);
+      const pushDispatchDurationMs = Date.now() - pushDispatchStart;
 
       let successCount = 0;
       const errorDetails: string[] = [];
@@ -283,6 +318,7 @@ export async function processDueReminders(
 
       // 2.5 Evaluate delivery outcome with Optimistic Concurrency Control (OCC)
       const nowIso = new Date().toISOString();
+      const statusUpdateStart = Date.now();
 
       if (successCount > 0) {
         // At least one subscription received the notification -> update to 'sent'
@@ -299,6 +335,8 @@ export async function processDueReminders(
           .eq("attempts", reminder.attempts)
           .select("id");
 
+        const statusUpdateDurationMs = Date.now() - statusUpdateStart;
+
         if (updateError) {
           summary.success = false;
           summary.errors.push(
@@ -311,6 +349,37 @@ export async function processDueReminders(
           summary.errors.push(warnMsg);
         } else {
           summary.sent += 1;
+
+          const scheduledEpochMs = new Date(reminder.scheduled_at).getTime();
+          const triggerDelayMs = options.requestReceivedAt != null
+            ? options.requestReceivedAt - scheduledEpochMs
+            : null;
+          const backendDurationMs = options.requestReceivedAt != null
+            ? Date.now() - options.requestReceivedAt
+            : Date.now() - reminderProcessStart;
+          const totalLatencyMs = Date.now() - scheduledEpochMs;
+
+          console.log(
+            `[Reminder Delivery] Reminder ${reminder.id} sent successfully: ` +
+            JSON.stringify({
+              reminder_id: reminder.id,
+              source_type: reminder.source_type,
+              scheduled_at: reminder.scheduled_at,
+              request_received_at: options.requestReceivedAt ? new Date(options.requestReceivedAt).toISOString() : null,
+              process_start_at: new Date(reminderProcessStart).toISOString(),
+              sent_at: nowIso,
+              trigger_delay_ms: triggerDelayMs,
+              claim_ms: claimDurationMs,
+              sub_fetch_ms: subFetchDurationMs,
+              push_dispatch_ms: pushDispatchDurationMs,
+              status_update_ms: statusUpdateDurationMs,
+              backend_duration_ms: backendDurationMs,
+              total_latency_ms: totalLatencyMs,
+              active_subscriptions: activeSubs.length,
+              success_count: successCount,
+              attempts: reminder.attempts,
+            })
+          );
         }
       } else {
         // All endpoints failed
@@ -331,6 +400,8 @@ export async function processDueReminders(
             .eq("attempts", reminder.attempts)
             .select("id");
 
+          const statusUpdateDurationMs = Date.now() - statusUpdateStart;
+
           if (updateError) {
             summary.success = false;
             summary.errors.push(
@@ -339,6 +410,22 @@ export async function processDueReminders(
           } else if (updatedRows && updatedRows.length > 0) {
             summary.failed += 1;
             summary.errors.push(`Reminder ${reminder.id} (failed permanently): ${summarizedError}`);
+            console.warn(
+              `[Reminder Delivery] Reminder ${reminder.id} marked failed permanently: ` +
+              JSON.stringify({
+                reminder_id: reminder.id,
+                source_type: reminder.source_type,
+                scheduled_at: reminder.scheduled_at,
+                status: "failed",
+                claim_ms: claimDurationMs,
+                sub_fetch_ms: subFetchDurationMs,
+                push_dispatch_ms: pushDispatchDurationMs,
+                status_update_ms: statusUpdateDurationMs,
+                total_item_ms: Date.now() - reminderProcessStart,
+                attempts: reminder.attempts,
+                error: summarizedError,
+              })
+            );
           }
         } else {
           // Retry with exponential backoff -> return to 'pending'
@@ -358,6 +445,8 @@ export async function processDueReminders(
             .eq("attempts", reminder.attempts)
             .select("id");
 
+          const statusUpdateDurationMs = Date.now() - statusUpdateStart;
+
           if (updateError) {
             summary.success = false;
             summary.errors.push(
@@ -365,6 +454,24 @@ export async function processDueReminders(
             );
           } else if (updatedRows && updatedRows.length > 0) {
             summary.retried += 1;
+            console.warn(
+              `[Reminder Delivery] Reminder ${reminder.id} scheduled for retry: ` +
+              JSON.stringify({
+                reminder_id: reminder.id,
+                source_type: reminder.source_type,
+                scheduled_at: reminder.scheduled_at,
+                retry_scheduled_at: nextScheduledAt,
+                backoff_seconds: backoffSeconds,
+                status: "retried",
+                claim_ms: claimDurationMs,
+                sub_fetch_ms: subFetchDurationMs,
+                push_dispatch_ms: pushDispatchDurationMs,
+                status_update_ms: statusUpdateDurationMs,
+                total_item_ms: Date.now() - reminderProcessStart,
+                attempts: reminder.attempts,
+                error: summarizedError,
+              })
+            );
           }
         }
       }
@@ -375,6 +482,9 @@ export async function processDueReminders(
 
       summary.failed += 1;
       summary.errors.push(`Reminder ${reminder.id}: ${errorMsg}`);
+      console.error(
+        `[Reminder Delivery] Unexpected error processing reminder ${reminder.id}: ${errorMsg}`
+      );
 
       // Gracefully record error with OCC guard
       try {
