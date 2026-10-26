@@ -132,6 +132,16 @@ export function SettingsView() {
     useState<ValidatedNoctisExport | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
+  // Synchronize transient modal and logout states when user session changes during render
+  const [prevUserId, setPrevUserId] = useState(user?.id);
+  if (user?.id !== prevUserId) {
+    setPrevUserId(user?.id);
+    setIsLogoutModalOpen(false);
+    setIsLoggingOut(false);
+    setIsProfileModalOpen(false);
+    setPendingImport(null);
+  }
+
   // Timezone display (synchronized when preferences change)
   const [currentTimezone, setCurrentTimezone] = useState(() => preferences.timezone || "Asia/Jakarta");
   const [prevPrefTz, setPrevPrefTz] = useState(preferences.timezone);
@@ -169,7 +179,26 @@ export function SettingsView() {
       }
 
       if (user) {
-        const isServerSubscribed = await checkServerPushStatus(sub.endpoint);
+        let isServerSubscribed = await checkServerPushStatus(sub.endpoint);
+        // If the browser already has an active push subscription with permission granted,
+        // but it is not linked to this user's account on the server yet (e.g. account switch),
+        // and this user has notification preferences enabled, sync it seamlessly.
+        if (
+          !isServerSubscribed &&
+          typeof Notification !== "undefined" &&
+          Notification.permission === "granted"
+        ) {
+          const hasAnyPrefEnabled =
+            preferences.notifications.course_schedule ||
+            preferences.notifications.task_deadline ||
+            preferences.notifications.agenda_event;
+          if (hasAnyPrefEnabled) {
+            const syncRes = await registerPushSubscription(vapidKey || undefined);
+            if (syncRes.success) {
+              isServerSubscribed = true;
+            }
+          }
+        }
         if (isMounted) {
           setIsPushSubscribed(isServerSubscribed);
         }
@@ -183,7 +212,7 @@ export function SettingsView() {
     return () => {
       isMounted = false;
     };
-  }, [user]);
+  }, [user, preferences.notifications]);
 
   // ── Handlers ──
 
@@ -384,10 +413,15 @@ export function SettingsView() {
 
       await signOut();
       toast.success("Berhasil keluar dari akun.");
+      setIsLogoutModalOpen(false);
+      setIsLoggingOut(false);
       router.replace("/login");
       router.refresh();
     } catch {
       toast.error("Gagal keluar dari akun. Silakan coba lagi.");
+      setIsLoggingOut(false);
+      setIsLogoutModalOpen(false);
+    } finally {
       setIsLoggingOut(false);
       setIsLogoutModalOpen(false);
     }
@@ -981,7 +1015,7 @@ export function SettingsView() {
       {/* ── 4. Logout Confirmation Modal ── */}
       <Modal
         isOpen={isLogoutModalOpen}
-        onClose={() => !isLoggingOut && setIsLogoutModalOpen(false)}
+        onClose={() => !isLogoutPending && setIsLogoutModalOpen(false)}
         title="Konfirmasi Keluar Akun"
         description="Apakah Anda yakin ingin mengakhiri sesi login saat ini?"
         maxWidth="sm"
@@ -995,19 +1029,19 @@ export function SettingsView() {
             <Button
               variant="ghost"
               size="sm"
-              disabled={isLoggingOut}
-              onClick={() => setIsLogoutModalOpen(false)}
+              disabled={isLogoutPending}
+              onClick={() => !isLogoutPending && setIsLogoutModalOpen(false)}
             >
               Batal
             </Button>
             <Button
               variant="primary"
               size="sm"
-              disabled={isLoggingOut}
+              disabled={isLogoutPending}
               className="bg-danger hover:bg-danger/90 text-white"
               onClick={handleConfirmLogout}
             >
-              {isLoggingOut ? "Sedang keluar..." : "Keluar Akun"}
+              {isLogoutPending ? "Sedang keluar..." : "Keluar Akun"}
             </Button>
           </div>
         </div>

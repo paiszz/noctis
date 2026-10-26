@@ -664,6 +664,36 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [preferences.theme, isPreferencesLoaded]);
 
+  // 3. Auto-sync existing Web Push subscription for authenticated user if permission is already granted
+  // and notification preferences are enabled. Never forces or prompts for permission.
+  useEffect(() => {
+    if (!user || !isPreferencesLoaded) return;
+    const hasAnyPref =
+      preferences.notifications.course_schedule ||
+      preferences.notifications.task_deadline ||
+      preferences.notifications.agenda_event;
+    if (!hasAnyPref) return;
+
+    if (
+      typeof window !== "undefined" &&
+      "Notification" in window &&
+      Notification.permission === "granted" &&
+      "serviceWorker" in navigator
+    ) {
+      import("@/lib/push/client")
+        .then(({ getExistingPushSubscription, registerPushSubscription }) => {
+          getExistingPushSubscription()
+            .then((sub) => {
+              if (sub) {
+                registerPushSubscription().catch(() => {});
+              }
+            })
+            .catch(() => {});
+        })
+        .catch(() => {});
+    }
+  }, [user, isPreferencesLoaded, preferences.notifications]);
+
   // ── Profile Actions ──
 
   const updateProfile = useCallback(

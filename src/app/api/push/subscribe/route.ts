@@ -180,32 +180,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 4. Handle cross-account endpoint conflict:
-  // If endpoint is registered by another user, REJECT with 409 Conflict immediately.
-  // Never allow an account to overwrite another account's push subscription!
-  if (existingSub && existingSub.user_id !== user.id) {
-    return NextResponse.json(
-      {
-        error:
-          "Endpoint Web Push ini sudah terdaftar pada akun lain. Silakan cabut subscription lama pada browser terlebih dahulu.",
-        code: "ENDPOINT_CONFLICT",
-      },
-      { status: 409 }
-    );
-  }
-
-  // 5. If current user already owns the endpoint, update encryption keys and timestamp
-  if (existingSub && existingSub.user_id === user.id) {
+  // 4. If endpoint is already registered (either under current user or from a prior session on this browser device),
+  // transfer / update subscription ownership to the current authenticated user and refresh encryption keys
+  if (existingSub) {
     const { error: updateError } = await db
       .from("push_subscriptions")
       .update({
+        user_id: user.id,
         p256dh: keys.p256dh,
         auth: keys.auth,
         user_agent: user_agent || null,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", existingSub.id)
-      .eq("user_id", user.id);
+      .eq("id", existingSub.id);
 
     if (updateError) {
       console.error(
@@ -225,7 +212,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // 6. If not registered, insert new subscription for current authenticated user
+  // 5. If not registered, insert new subscription for current authenticated user
   const { data: inserted, error: insertError } = await db
     .from("push_subscriptions")
     .insert({
@@ -239,16 +226,28 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (insertError) {
-    // Unique constraint violation safety net (Postgres error 23505)
+    // Unique constraint violation safety net (Postgres error 23505) - race condition update
     if (insertError.code === "23505") {
-      return NextResponse.json(
-        {
-          error:
-            "Endpoint Web Push ini sudah terdaftar pada akun lain. Silakan cabut subscription lama pada browser terlebih dahulu.",
-          code: "ENDPOINT_CONFLICT",
-        },
-        { status: 409 }
-      );
+      const { data: updatedAfterRace, error: raceUpdateError } = await db
+        .from("push_subscriptions")
+        .update({
+          user_id: user.id,
+          p256dh: keys.p256dh,
+          auth: keys.auth,
+          user_agent: user_agent || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("endpoint", endpoint)
+        .select("id")
+        .single();
+
+      if (!raceUpdateError && updatedAfterRace) {
+        return NextResponse.json({
+          success: true,
+          message: "Subscription Web Push berhasil diperbarui.",
+          id: updatedAfterRace.id,
+        });
+      }
     }
 
     console.error(

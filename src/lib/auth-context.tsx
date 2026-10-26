@@ -107,7 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return nextUser;
       });
       setIsLoading(false);
-      if (event === "SIGNED_IN") {
+      if (event === "SIGNED_IN" || event === "SIGNED_OUT") {
         isLoggingOutRef.current = false;
         setIsLoggingOut(false);
       }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale/id";
 import {
@@ -19,28 +19,22 @@ import { toTimezoneDate, DEFAULT_TIMEZONE } from "@/lib/date";
 import { type AgendaEvent, isUpcomingAgenda, isPastAgenda } from "@/types";
 import { AgendaFormModal } from "./AgendaFormModal";
 import { toast } from "sonner";
+import { useRealtimeClock } from "@/lib/hooks/use-realtime-clock";
 
 export function AgendaView() {
   const { agendaEvents, deleteAgendaEvent, preferences, isLoaded } = useData();
   const userTimezone = preferences?.timezone || DEFAULT_TIMEZONE;
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [now, setNow] = useState<Date>(() => toTimezoneDate(new Date(), userTimezone));
-  const [prevTimezone, setPrevTimezone] = useState(userTimezone);
 
-  // Synchronize now if userTimezone changes during render
-  if (userTimezone !== prevTimezone) {
-    setPrevTimezone(userTimezone);
-    setNow(toTimezoneDate(new Date(), userTimezone));
-  }
+  // Dynamic targets for agenda events (start and end times) so upcoming/past transitions happen in real-time
+  const targetTimestamps = useMemo(() => {
+    return agendaEvents
+      .flatMap((a) => [a.start_at, a.end_at])
+      .filter((t): t is string => Boolean(t));
+  }, [agendaEvents]);
 
-  useEffect(() => {
-    // Update current time every minute to keep upcoming/past calculations accurate
-    const timer = setInterval(() => {
-      setNow(toTimezoneDate(new Date(), userTimezone));
-    }, 60000);
-    return () => clearInterval(timer);
-  }, [userTimezone]);
+  const now = useRealtimeClock(userTimezone, targetTimestamps);
 
   // Modal states
   const [isFormOpen, setIsFormOpen] = useState(false);

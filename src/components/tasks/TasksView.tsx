@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { id as localeId } from "date-fns/locale/id";
 import {
@@ -25,6 +25,7 @@ import {
 import type { TaskPriority, TaskStatus, Task } from "@/types";
 import { TaskFormModal } from "./TaskFormModal";
 import { toast } from "sonner";
+import { useRealtimeClock } from "@/lib/hooks/use-realtime-clock";
 
 type FilterStatus = TaskStatus | "all" | "overdue";
 type FilterPriority = TaskPriority | "all";
@@ -51,22 +52,14 @@ export function TasksView() {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [filterPriority, setFilterPriority] = useState<FilterPriority>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [now, setNow] = useState<Date>(() => toTimezoneDate(new Date(), userTimezone));
-  const [prevTimezone, setPrevTimezone] = useState(userTimezone);
+  // Dynamic targets for active tasks so clock ticks at exact deadline boundaries
+  const targetTimestamps = useMemo(() => {
+    return tasks
+      .filter((t) => t.status !== "done" && t.due_at)
+      .map((t) => t.due_at);
+  }, [tasks]);
 
-  // Synchronize now if userTimezone changes during render
-  if (userTimezone !== prevTimezone) {
-    setPrevTimezone(userTimezone);
-    setNow(toTimezoneDate(new Date(), userTimezone));
-  }
-
-  useEffect(() => {
-    // Update current time every minute to keep overdue calculations accurate
-    const timer = setInterval(() => {
-      setNow(toTimezoneDate(new Date(), userTimezone));
-    }, 60000);
-    return () => clearInterval(timer);
-  }, [userTimezone]);
+  const now = useRealtimeClock(userTimezone, targetTimestamps);
 
   // Modal states
   const [isFormOpen, setIsFormOpen] = useState(false);

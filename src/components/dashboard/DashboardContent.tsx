@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { format, addDays, startOfWeek } from "date-fns";
 import { id as localeId } from "date-fns/locale/id";
 import {
@@ -27,7 +27,8 @@ import Link from "next/link";
 import { Card, Badge, Button, priorityVariant } from "@/components/ui";
 import { useData } from "@/lib/data-context";
 import { useAuth } from "@/lib/auth-context";
-import { toTimezoneDate, DEFAULT_TIMEZONE } from "@/lib/date";
+import { toTimezoneDate, DEFAULT_TIMEZONE, datetimeLocalToIso } from "@/lib/date";
+import { useRealtimeClock } from "@/lib/hooks/use-realtime-clock";
 import {
   isOverdue,
   isUpcomingAgenda,
@@ -57,25 +58,36 @@ export function DashboardContent() {
   } = useData();
 
   const userTimezone = preferences?.timezone || DEFAULT_TIMEZONE;
-  const [now, setNow] = useState<Date>(() => toTimezoneDate(new Date(), userTimezone));
-  const [prevTimezone, setPrevTimezone] = useState(userTimezone);
+  // Dynamic transition targets (tasks deadlines, agenda start/end, and today's schedule times)
+  const targetTimestamps = useMemo(() => {
+    const targets: string[] = [];
+    tasks.forEach((t) => {
+      if (t.status !== "done" && t.due_at) {
+        targets.push(t.due_at);
+      }
+    });
+    agendaEvents.forEach((a) => {
+      if (a.start_at) targets.push(a.start_at);
+      if (a.end_at) targets.push(a.end_at);
+    });
+    const todayStr = format(toTimezoneDate(new Date(), userTimezone), "yyyy-MM-dd");
+    schedules.forEach((s) => {
+      if (s.start_time) {
+        const iso = datetimeLocalToIso(`${todayStr}T${s.start_time}`, userTimezone);
+        if (iso) targets.push(iso);
+      }
+      if (s.end_time) {
+        const iso = datetimeLocalToIso(`${todayStr}T${s.end_time}`, userTimezone);
+        if (iso) targets.push(iso);
+      }
+    });
+    return targets;
+  }, [tasks, agendaEvents, schedules, userTimezone]);
 
-  // Synchronize now if userTimezone changes during render
-  if (userTimezone !== prevTimezone) {
-    setPrevTimezone(userTimezone);
-    setNow(toTimezoneDate(new Date(), userTimezone));
-  }
+  const now = useRealtimeClock(userTimezone, targetTimestamps);
 
   const isProfilePending = !isLoaded || isProfileLoading || isLoggingOut;
   const displayName = profile?.name ? `${profile.name}.` : user ? "Pengguna Noctis." : "Tamu.";
-
-  useEffect(() => {
-    // Keep user timezone time synchronized and update every minute
-    const timer = setInterval(() => {
-      setNow(toTimezoneDate(new Date(), userTimezone));
-    }, 60000);
-    return () => clearInterval(timer);
-  }, [userTimezone]);
 
   // ── Date Computations ──
   const greeting = useMemo(() => {

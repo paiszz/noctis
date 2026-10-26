@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { format, addDays, startOfWeek } from "date-fns";
 import { id as localeId } from "date-fns/locale/id";
 import {
@@ -21,6 +21,7 @@ import { DAY_LABELS, isScheduleActiveOnDate } from "@/types";
 import type { DayOfWeek, CourseSchedule } from "@/types";
 import { ScheduleFormModal } from "./ScheduleFormModal";
 import { toast } from "sonner";
+import { useRealtimeClock } from "@/lib/hooks/use-realtime-clock";
 
 const START_HOUR = 7;
 const END_HOUR = 20;
@@ -163,29 +164,14 @@ export function CalendarView() {
   const userTimezone = preferences?.timezone || DEFAULT_TIMEZONE;
 
   const [currentDate, setCurrentDate] = useState<Date>(() => toTimezoneDate(new Date(), userTimezone));
-  const [today, setToday] = useState<Date>(() => toTimezoneDate(new Date(), userTimezone));
-  const [prevTimezone, setPrevTimezone] = useState(userTimezone);
+  const today = useRealtimeClock(userTimezone);
   const [view, setView] = useState<"day" | "week">("week");
-
-  // Synchronize today if userTimezone changes during render
-  if (userTimezone !== prevTimezone) {
-    setPrevTimezone(userTimezone);
-    setToday(toTimezoneDate(new Date(), userTimezone));
-  }
 
   // Modal states
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<CourseSchedule | null>(null);
   const [scheduleToDelete, setScheduleToDelete] = useState<CourseSchedule | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-
-  useEffect(() => {
-    // Check and update today every minute to reflect midnight transitions
-    const timer = setInterval(() => {
-      setToday(toTimezoneDate(new Date(), userTimezone));
-    }, 60000);
-    return () => clearInterval(timer);
-  }, [userTimezone]);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 }); // Monday
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
