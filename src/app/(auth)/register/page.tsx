@@ -196,7 +196,7 @@ export default function RegisterPage() {
                 setName(e.target.value);
                 if (errorMessage) setErrorMessage(null);
               }}
-              placeholder="Contoh: Faiz Maulana"
+              placeholder="Contoh: Malenia Blade of Miquella"
               className="w-full px-3.5 py-2.5 text-sm bg-surface-muted border border-border rounded-xl text-foreground placeholder:text-muted focus:outline-none focus:border-border-focus transition-colors disabled:opacity-60"
             />
           </div>
