@@ -56,3 +56,7 @@ CREATE TRIGGER trg_cleanup_reminders_agenda
   AFTER DELETE ON public.agenda_events
   FOR EACH ROW
   EXECUTE FUNCTION public.cleanup_orphaned_reminders();
+
+-- 5. Revoke direct execute privileges from client roles
+REVOKE EXECUTE ON FUNCTION public.cleanup_orphaned_reminders()
+FROM PUBLIC, anon, authenticated;

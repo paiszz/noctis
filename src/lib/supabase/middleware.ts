@@ -50,7 +50,8 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isPublicApiRoute =
-    pathname === '/api/push/vapid-public-key' && request.method === 'GET';
+    (pathname === '/api/push/vapid-public-key' && request.method === 'GET') ||
+    pathname === '/api/reminders/process';
 
   const isPublicRoute =
     PUBLIC_ROUTES.some((route) => pathname.startsWith(route)) ||

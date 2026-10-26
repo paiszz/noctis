@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node scripts/test-schedule-date-range.mjs && node scripts/test-agenda-categorization.mjs && node scripts/test-next-up.mjs && node scripts/test-timezone-support.mjs && node --experimental-strip-types scripts/test-import-validation.mjs && node scripts/test-pwa.mjs && node --experimental-strip-types scripts/test-redirect-sanitizer.mjs && node --experimental-strip-types scripts/test-push-subscription.mjs && node scripts/test-reminder-logic.mjs"
+    "test": "node scripts/test-schedule-date-range.mjs && node scripts/test-agenda-categorization.mjs && node scripts/test-next-up.mjs && node scripts/test-timezone-support.mjs && node --experimental-strip-types scripts/test-import-validation.mjs && node scripts/test-pwa.mjs && node --experimental-strip-types scripts/test-redirect-sanitizer.mjs && node --experimental-strip-types scripts/test-push-subscription.mjs && node scripts/test-reminder-logic.mjs && node --experimental-strip-types scripts/test-delivery-engine.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
@@ -20,6 +20,7 @@
     "react-dom": "19.3.0",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.7.0",
+    "web-push": "^3.6.7",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -27,6 +28,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
     "tailwindcss": "^4",
