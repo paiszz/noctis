@@ -27,7 +27,7 @@ function isValidUUID(val?: string | null): boolean {
 /**
  * Converts a database TaskRecord to the client application Task model.
  */
-function mapRecordToTask(record: TaskRecord): Task {
+export function mapRecordToTask(record: TaskRecord): Task {
   return {
     id: record.id,
     user_id: record.user_id,

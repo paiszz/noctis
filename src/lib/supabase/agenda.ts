@@ -19,7 +19,7 @@ export interface AgendaEventRecord {
 /**
  * Converts a database AgendaEventRecord to the client application AgendaEvent model.
  */
-function mapRecordToAgendaEvent(record: AgendaEventRecord): AgendaEvent {
+export function mapRecordToAgendaEvent(record: AgendaEventRecord): AgendaEvent {
   return {
     id: record.id,
     user_id: record.user_id,
@@ -125,7 +125,7 @@ export async function createUserAgendaEvent(
 export async function updateUserAgendaEvent(
   userId: string,
   eventId: string,
-  updates: Partial<Omit<AgendaEvent, "id" | "user_id">>
+  updates: Partial<Omit<AgendaEvent, "id" | "user_id" | "end_at">> & { end_at?: string | null }
 ): Promise<SupabaseResult<AgendaEvent>> {
   const supabase = createBrowserClient();
   if (!supabase) {
@@ -147,7 +147,7 @@ export async function updateUserAgendaEvent(
       payload.start_at = updates.start_at;
     }
     if (updates.end_at !== undefined) {
-      payload.end_at = updates.end_at || null;
+      payload.end_at = updates.end_at && typeof updates.end_at === "string" && updates.end_at.trim() ? updates.end_at.trim() : null;
     }
     if (updates.location !== undefined) {
       payload.location = updates.location?.trim() || null;

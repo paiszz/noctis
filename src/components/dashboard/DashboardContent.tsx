@@ -883,6 +883,7 @@ export function DashboardContent() {
                           {format(toTimezoneDate(item.start_at, userTimezone), "dd MMM · HH:mm", {
                             locale: localeId,
                           })}
+                          {item.end_at && ` - ${format(toTimezoneDate(item.end_at, userTimezone), "HH:mm")}`}
                           {item.location && ` · ${item.location}`}
                         </p>
                       </div>

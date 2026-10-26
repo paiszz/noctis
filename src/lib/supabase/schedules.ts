@@ -23,7 +23,7 @@ export interface ScheduleRecord {
 /**
  * Converts a database ScheduleRecord to the client application CourseSchedule model.
  */
-function mapRecordToSchedule(record: ScheduleRecord): CourseSchedule {
+export function mapRecordToSchedule(record: ScheduleRecord): CourseSchedule {
   return {
     id: record.id,
     user_id: record.user_id,

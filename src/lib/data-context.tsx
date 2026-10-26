@@ -31,6 +31,8 @@ import {
   mockAgendaEvents as initialMockAgendaEvents,
 } from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth-context";
+import { createClient as createBrowserClient } from "@/lib/supabase/client";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import {
   getUserProfile,
   updateUserProfile as apiUpdateUserProfile,
@@ -42,12 +44,16 @@ import {
   createUserTask,
   updateUserTask,
   deleteUserTask,
+  mapRecordToTask,
+  type TaskRecord,
 } from "@/lib/supabase/tasks";
 import {
   getUserSchedules,
   createUserSchedule,
   updateUserSchedule,
   deleteUserSchedule,
+  mapRecordToSchedule,
+  type ScheduleRecord,
 } from "@/lib/supabase/schedules";
 import {
   getUserNotes,
@@ -60,6 +66,8 @@ import {
   createUserAgendaEvent,
   updateUserAgendaEvent,
   deleteUserAgendaEvent,
+  mapRecordToAgendaEvent,
+  type AgendaEventRecord,
 } from "@/lib/supabase/agenda";
 import {
   importUserDataAtomic,
@@ -193,7 +201,7 @@ interface DataContextType {
   // Agenda Events
   agendaEvents: AgendaEvent[];
   addAgendaEvent: (input: AgendaInput) => Promise<AgendaEvent>;
-  updateAgendaEvent: (id: string, updates: Partial<Omit<AgendaEvent, "id" | "user_id">>) => Promise<void>;
+  updateAgendaEvent: (id: string, updates: Partial<Omit<AgendaEvent, "id" | "user_id" | "end_at">> & { end_at?: string | null }) => Promise<void>;
   deleteAgendaEvent: (id: string) => Promise<void>;
 
   // Profile
@@ -693,6 +701,237 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         .catch(() => {});
     }
   }, [user, isPreferencesLoaded, preferences.notifications]);
+
+  // 4. Supabase Realtime synchronization across devices and tabs for authenticated users
+  useEffect(() => {
+    if (!user || !user.id) return;
+
+    const supabase = createBrowserClient();
+    if (!supabase) return;
+
+    let isSubscribed = true;
+    const tabSuffix =
+      typeof window !== "undefined" && window.sessionStorage
+        ? sessionStorage.getItem("noctis_tab_id") ||
+          (() => {
+            const id = Math.random().toString(36).slice(2, 9);
+            try {
+              sessionStorage.setItem("noctis_tab_id", id);
+            } catch {
+              // Ignore storage disabled errors
+            }
+            return id;
+          })()
+        : Math.random().toString(36).slice(2, 9);
+    const channelName = `user-sync-${user.id}-${tabSuffix}`;
+    const channel = supabase.channel(channelName);
+
+    // Tasks realtime listener
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "tasks",
+        filter: `user_id=eq.${user.id}`,
+      },
+      (payload: RealtimePostgresChangesPayload<{ [key: string]: unknown }>) => {
+        if (!isSubscribed) return;
+        const eventType = payload.eventType;
+
+        if (eventType === "DELETE") {
+          const oldId = (payload.old as { id?: string })?.id;
+          if (!oldId) return;
+          setTasks((prev) => {
+            const next = prev.filter((t) => t.id !== oldId);
+            try {
+              const storageKey = getScopedStorageKey(user.id, "tasks");
+              localStorage.setItem(storageKey, JSON.stringify(next));
+            } catch (e) {
+              console.warn("Error caching tasks from realtime", e);
+            }
+            return next;
+          });
+        } else if (eventType === "INSERT" || eventType === "UPDATE") {
+          const newRecord = payload.new as unknown as TaskRecord;
+          if (!newRecord || !newRecord.id) return;
+          const mapped = mapRecordToTask(newRecord);
+
+          setTasks((prev) => {
+            const existingIndex = prev.findIndex((t) => t.id === mapped.id);
+            const next =
+              existingIndex >= 0
+                ? prev.map((t, idx) => (idx === existingIndex ? mapped : t))
+                : [mapped, ...prev];
+            try {
+              const storageKey = getScopedStorageKey(user.id, "tasks");
+              localStorage.setItem(storageKey, JSON.stringify(next));
+            } catch (e) {
+              console.warn("Error caching tasks from realtime", e);
+            }
+            return next;
+          });
+        }
+      }
+    );
+
+    // Schedules realtime listener
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "schedules",
+        filter: `user_id=eq.${user.id}`,
+      },
+      (payload: RealtimePostgresChangesPayload<{ [key: string]: unknown }>) => {
+        if (!isSubscribed) return;
+        const eventType = payload.eventType;
+
+        if (eventType === "DELETE") {
+          const oldId = (payload.old as { id?: string })?.id;
+          if (!oldId) return;
+          setSchedules((prev) => {
+            const next = prev.filter((s) => s.id !== oldId);
+            try {
+              const storageKey = getScopedStorageKey(user.id, "schedules");
+              localStorage.setItem(storageKey, JSON.stringify(next));
+            } catch (e) {
+              console.warn("Error caching schedules from realtime", e);
+            }
+            return next;
+          });
+        } else if (eventType === "INSERT" || eventType === "UPDATE") {
+          const newRecord = payload.new as unknown as ScheduleRecord;
+          if (!newRecord || !newRecord.id) return;
+          const mapped = mapRecordToSchedule(newRecord);
+
+          setSchedules((prev) => {
+            const existingIndex = prev.findIndex((s) => s.id === mapped.id);
+            const next =
+              existingIndex >= 0
+                ? prev.map((s, idx) => (idx === existingIndex ? mapped : s))
+                : [...prev, mapped];
+            try {
+              const storageKey = getScopedStorageKey(user.id, "schedules");
+              localStorage.setItem(storageKey, JSON.stringify(next));
+            } catch (e) {
+              console.warn("Error caching schedules from realtime", e);
+            }
+            return next;
+          });
+        }
+      }
+    );
+
+    // Agenda Events realtime listener
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "agenda_events",
+        filter: `user_id=eq.${user.id}`,
+      },
+      (payload: RealtimePostgresChangesPayload<{ [key: string]: unknown }>) => {
+        if (!isSubscribed) return;
+        const eventType = payload.eventType;
+
+        if (eventType === "DELETE") {
+          const oldId = (payload.old as { id?: string })?.id;
+          if (!oldId) return;
+          setAgendaEvents((prev) => {
+            const next = prev.filter((a) => a.id !== oldId);
+            try {
+              const storageKey = getScopedStorageKey(user.id, "agenda");
+              localStorage.setItem(storageKey, JSON.stringify(next));
+            } catch (e) {
+              console.warn("Error caching agenda events from realtime", e);
+            }
+            return next;
+          });
+        } else if (eventType === "INSERT" || eventType === "UPDATE") {
+          const newRecord = payload.new as unknown as AgendaEventRecord;
+          if (!newRecord || !newRecord.id) return;
+          const mapped = mapRecordToAgendaEvent(newRecord);
+
+          setAgendaEvents((prev) => {
+            const existingIndex = prev.findIndex((a) => a.id === mapped.id);
+            const next =
+              existingIndex >= 0
+                ? prev.map((a, idx) => (idx === existingIndex ? mapped : a))
+                : [mapped, ...prev];
+            try {
+              const storageKey = getScopedStorageKey(user.id, "agenda");
+              localStorage.setItem(storageKey, JSON.stringify(next));
+            } catch (e) {
+              console.warn("Error caching agenda events from realtime", e);
+            }
+            return next;
+          });
+        }
+      }
+    );
+
+    // Subscribe and handle reconnection
+    let hadConnected = false;
+    channel.subscribe((status: string) => {
+      if (status === "SUBSCRIBED") {
+        if (hadConnected) {
+          // Re-fetch data on reconnection to reconcile any missed events during network blip
+          Promise.all([
+            getUserTasks(user.id),
+            getUserSchedules(user.id),
+            getUserAgendaEvents(user.id),
+          ])
+            .then(([tasksRes, schedRes, agendaRes]) => {
+              if (tasksRes.data) setTasks(tasksRes.data);
+              if (schedRes.data) setSchedules(schedRes.data);
+              if (agendaRes.data) setAgendaEvents(agendaRes.data);
+            })
+            .catch(() => {});
+        }
+        hadConnected = true;
+      }
+    });
+
+    return () => {
+      isSubscribed = false;
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  // 5. Multi-tab instant local synchronization via window "storage" event
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (!e.newValue) return;
+      const scopedTasksKey = user ? getScopedStorageKey(user.id, "tasks") : LEGACY_STORAGE_KEYS.tasks;
+      const scopedSchedulesKey = user ? getScopedStorageKey(user.id, "schedules") : LEGACY_STORAGE_KEYS.schedules;
+      const scopedAgendaKey = user ? getScopedStorageKey(user.id, "agenda") : LEGACY_STORAGE_KEYS.agenda;
+
+      try {
+        if (e.key === scopedTasksKey) {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) setTasks(parsed);
+        } else if (e.key === scopedSchedulesKey) {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) setSchedules(parsed);
+        } else if (e.key === scopedAgendaKey) {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) setAgendaEvents(parsed);
+        }
+      } catch (err) {
+        console.warn("Failed to synchronize local storage event across tabs", err);
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, [user]);
 
   // ── Profile Actions ──
 
@@ -1643,8 +1882,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const updateAgendaEvent = useCallback(
     async (
       id: string,
-      updates: Partial<Omit<AgendaEvent, "id" | "user_id">>
+      updates: Partial<Omit<AgendaEvent, "id" | "user_id" | "end_at">> & { end_at?: string | null }
     ): Promise<void> => {
+      const resolvedEndAt =
+        updates.end_at !== undefined
+          ? (updates.end_at ? updates.end_at : undefined)
+          : undefined;
+
       if (user) {
         let rollbackAgenda: AgendaEvent[] = [];
         setAgendaEvents((prev) => {
@@ -1661,6 +1905,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
                       : a.description,
                   location:
                     updates.location !== undefined ? updates.location.trim() || undefined : a.location,
+                  end_at: updates.end_at !== undefined ? resolvedEndAt : a.end_at,
+                  reminder_minutes:
+                    updates.reminder_minutes !== undefined
+                      ? (updates.reminder_minutes ?? undefined)
+                      : a.reminder_minutes,
                   updated_at: new Date().toISOString(),
                 }
               : a
@@ -1707,6 +1956,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
                       : a.description,
                   location:
                     updates.location !== undefined ? updates.location.trim() || undefined : a.location,
+                  end_at: updates.end_at !== undefined ? resolvedEndAt : a.end_at,
+                  reminder_minutes:
+                    updates.reminder_minutes !== undefined
+                      ? (updates.reminder_minutes ?? undefined)
+                      : a.reminder_minutes,
                   updated_at: new Date().toISOString(),
                 }
               : a

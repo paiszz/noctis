@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseConfig, getSupabaseConfigNotice } from './config';
 
 let warned = false;
+let cachedBrowserClient: SupabaseClient | null = null;
 
 /**
  * Creates or retrieves a Supabase client for client-side React components.
@@ -18,6 +19,13 @@ export function createClient(): SupabaseClient | null {
       warned = true;
     }
     return null;
+  }
+
+  if (typeof window !== 'undefined') {
+    if (!cachedBrowserClient) {
+      cachedBrowserClient = createBrowserClient(url, publishableKey);
+    }
+    return cachedBrowserClient;
   }
 
   return createBrowserClient(url, publishableKey);

@@ -55,7 +55,7 @@ export function AgendaFormModal({
   );
   const [endAt, setEndAt] = useState(() =>
     agendaToEdit
-      ? isoToDatetimeLocal(agendaToEdit.end_at, userTimezone)
+      ? (agendaToEdit.end_at ? isoToDatetimeLocal(agendaToEdit.end_at, userTimezone) : "")
       : getDefaultTimes().end
   );
   const [location, setLocation] = useState(() => agendaToEdit?.location || "");
@@ -78,7 +78,7 @@ export function AgendaFormModal({
         setTitle(agendaToEdit.title);
         setDescription(agendaToEdit.description || "");
         setStartAt(isoToDatetimeLocal(agendaToEdit.start_at, userTimezone));
-        setEndAt(isoToDatetimeLocal(agendaToEdit.end_at, userTimezone));
+        setEndAt(agendaToEdit.end_at ? isoToDatetimeLocal(agendaToEdit.end_at, userTimezone) : "");
         setLocation(agendaToEdit.location || "");
         setReminderMinutes(
           agendaToEdit.reminder_minutes !== undefined
@@ -119,7 +119,7 @@ export function AgendaFormModal({
     }
 
     const startISO = datetimeLocalToIso(startAt, userTimezone);
-    const endISO = endAt ? datetimeLocalToIso(endAt, userTimezone) : undefined;
+    const endISO = endAt && endAt.trim() ? datetimeLocalToIso(endAt, userTimezone) : null;
     const remMin = reminderMinutes !== "" ? Number(reminderMinutes) : undefined;
 
     try {
@@ -127,20 +127,20 @@ export function AgendaFormModal({
       if (agendaToEdit) {
         await updateAgendaEvent(agendaToEdit.id, {
           title,
-          description: description || undefined,
+          description: description ? description.trim() : undefined,
           start_at: startISO,
           end_at: endISO,
-          location: location || undefined,
+          location: location ? location.trim() : undefined,
           reminder_minutes: remMin,
         });
         toast.success("Agenda berhasil diperbarui");
       } else {
         await addAgendaEvent({
           title,
-          description: description || undefined,
+          description: description ? description.trim() : undefined,
           start_at: startISO,
-          end_at: endISO,
-          location: location || undefined,
+          end_at: endISO || undefined,
+          location: location ? location.trim() : undefined,
           reminder_minutes: remMin,
         });
         toast.success("Agenda baru berhasil ditambahkan");

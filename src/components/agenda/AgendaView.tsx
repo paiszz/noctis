@@ -74,6 +74,12 @@ export function AgendaView() {
       .reverse(); // Most recently completed first
   }, [filteredEvents, now, userTimezone]);
 
+  // Keep currently edited agenda synced with latest data-context state
+  const activeAgendaToEdit = useMemo(() => {
+    if (!editingAgenda) return null;
+    return agendaEvents.find((a) => a.id === editingAgenda.id) ?? editingAgenda;
+  }, [editingAgenda, agendaEvents]);
+
   const handleOpenCreate = () => {
     setEditingAgenda(null);
     setIsFormOpen(true);
@@ -82,6 +88,11 @@ export function AgendaView() {
   const handleOpenEdit = (event: AgendaEvent) => {
     setEditingAgenda(event);
     setIsFormOpen(true);
+  };
+
+  const handleCloseForm = () => {
+    setIsFormOpen(false);
+    setEditingAgenda(null);
   };
 
   const confirmDelete = async () => {
@@ -302,6 +313,7 @@ export function AgendaView() {
               <div className="space-y-2.5">
                 {past.map((event) => {
                   const startDate = toTimezoneDate(event.start_at, userTimezone);
+                  const endDate = event.end_at ? toTimezoneDate(event.end_at, userTimezone) : null;
 
                   return (
                     <Card
@@ -348,9 +360,12 @@ export function AgendaView() {
                           <div className="flex items-center gap-3 mt-1 text-xs text-muted">
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3" />
-                              {format(startDate, "dd MMM yyyy, HH:mm", {
-                                locale: localeId,
-                              })}
+                              <span>
+                                {format(startDate, "dd MMM yyyy, HH:mm", {
+                                  locale: localeId,
+                                })}
+                                {endDate && ` — ${format(endDate, "HH:mm", { locale: localeId })}`}
+                              </span>
                             </span>
                             {event.location && (
                               <span className="flex items-center gap-1 truncate">
@@ -373,8 +388,8 @@ export function AgendaView() {
       {/* Agenda Create / Edit Modal */}
       <AgendaFormModal
         isOpen={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
-        agendaToEdit={editingAgenda}
+        onClose={handleCloseForm}
+        agendaToEdit={activeAgendaToEdit}
         onDelete={(a) => setAgendaToDelete(a)}
       />
 
