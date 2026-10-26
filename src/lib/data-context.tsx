@@ -65,6 +65,13 @@ import {
   importUserDataAtomic,
   type ImportAtomicPayload,
 } from "@/lib/supabase/import";
+import {
+  syncTaskReminder,
+  syncScheduleReminders,
+  syncAgendaReminder,
+  deleteRemindersBySource,
+  resyncRemindersForCategory,
+} from "@/lib/supabase/reminders";
 
 export const LEGACY_STORAGE_KEYS = {
   tasks: "noctis_storage_tasks_v1",
@@ -772,6 +779,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         } catch (e) {
           console.warn("Error caching scoped preferences", e);
         }
+
+        // Resync reminders for the toggled category
+        resyncRemindersForCategory(
+          user.id,
+          category,
+          enabled,
+          { tasks, schedules, agendaEvents },
+          preferences.timezone
+        ).catch((e) => console.warn("Error resyncing reminders for category:", e));
       } else {
         setPreferences((prev) => {
           const next = {
@@ -787,7 +803,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
       }
     },
-    [user, preferences]
+    [user, preferences, tasks, schedules, agendaEvents]
   );
 
   // ── Task Actions (Supabase Cloud + Local Storage Fallback) ──
@@ -810,6 +826,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           }
           return next;
         });
+
+        if (preferences.notifications.task_deadline) {
+          syncTaskReminder(user.id, data, true, preferences.timezone).catch((e) =>
+            console.warn("Error syncing task reminder:", e)
+          );
+        }
 
         return data;
       } else {
@@ -841,7 +863,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         return newTask;
       }
     },
-    [user]
+    [user, preferences]
   );
 
   const updateTask = useCallback(
@@ -883,6 +905,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             }
             return next;
           });
+
+          syncTaskReminder(
+            user.id,
+            data,
+            preferences.notifications.task_deadline,
+            preferences.timezone
+          ).catch((e) => console.warn("Error syncing task reminder:", e));
         }
       } else {
         // Guest mode
@@ -910,7 +939,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
       }
     },
-    [user]
+    [user, preferences]
   );
 
   const deleteTask = useCallback(
@@ -937,6 +966,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         } catch (e) {
           console.warn("Error caching tasks", e);
         }
+
+        deleteRemindersBySource(user.id, "task", id).catch((e) =>
+          console.warn("Error deleting task reminders:", e)
+        );
       } else {
         // Guest mode
         setTasks((prev) => {
@@ -995,6 +1028,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         } catch (e) {
           console.warn("Error caching tasks", e);
         }
+
+        syncTaskReminder(
+          user.id,
+          { ...target, status: nextStatus },
+          preferences.notifications.task_deadline,
+          preferences.timezone
+        ).catch((e) => console.warn("Error syncing toggled task reminder:", e));
       } else {
         // Guest mode
         setTasks((prev) => {
@@ -1015,7 +1055,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
       }
     },
-    [user, tasks]
+    [user, tasks, preferences]
   );
 
   // ── Note Actions (Supabase Cloud + Local Storage Fallback) ──
@@ -1301,6 +1341,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           return next;
         });
 
+        if (preferences.notifications.course_schedule) {
+          syncScheduleReminders(user.id, data, true, preferences.timezone).catch((e) =>
+            console.warn("Error syncing schedule reminders:", e)
+          );
+        }
+
         return data;
       } else {
         // Guest mode
@@ -1334,7 +1380,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         return newSchedule;
       }
     },
-    [user]
+    [user, preferences]
   );
 
   const updateSchedule = useCallback(
@@ -1399,6 +1445,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             }
             return next;
           });
+
+          syncScheduleReminders(
+            user.id,
+            data,
+            preferences.notifications.course_schedule,
+            preferences.timezone
+          ).catch((e) => console.warn("Error syncing schedule reminders:", e));
         }
       } else {
         // Guest mode
@@ -1433,7 +1486,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
       }
     },
-    [user, schedules]
+    [user, schedules, preferences]
   );
 
   const deleteSchedule = useCallback(
@@ -1460,6 +1513,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         } catch (e) {
           console.warn("Error caching schedules", e);
         }
+
+        deleteRemindersBySource(user.id, "course_schedule", id).catch((e) =>
+          console.warn("Error deleting schedule reminders:", e)
+        );
       } else {
         // Guest mode
         setSchedules((prev) => {
@@ -1497,6 +1554,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           return next;
         });
 
+        if (preferences.notifications.agenda_event) {
+          syncAgendaReminder(user.id, data, true, preferences.timezone).catch((e) =>
+            console.warn("Error syncing agenda reminder:", e)
+          );
+        }
+
         return data;
       } else {
         // Guest mode
@@ -1527,7 +1590,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         return newEvent;
       }
     },
-    [user]
+    [user, preferences]
   );
 
   const updateAgendaEvent = useCallback(
@@ -1574,6 +1637,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             }
             return next;
           });
+
+          syncAgendaReminder(
+            user.id,
+            data,
+            preferences.notifications.agenda_event,
+            preferences.timezone
+          ).catch((e) => console.warn("Error syncing agenda reminder:", e));
         }
       } else {
         // Guest mode
@@ -1603,7 +1673,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
       }
     },
-    [user]
+    [user, preferences]
   );
 
   const deleteAgendaEvent = useCallback(
@@ -1630,6 +1700,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         } catch (e) {
           console.warn("Error caching agenda events", e);
         }
+
+        deleteRemindersBySource(user.id, "agenda_event", id).catch((e) =>
+          console.warn("Error deleting agenda reminders:", e)
+        );
       } else {
         // Guest mode
         setAgendaEvents((prev) => {
@@ -2001,8 +2075,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           console.warn("Error caching scoped preferences", e);
         }
       }
+
+      // Synchronize reminders for imported data
+      const effectivePrefs = newPrefs ?? preferences;
+      if (newTasks !== undefined && effectivePrefs.notifications.task_deadline) {
+        for (const t of newTasks) {
+          if (t.status !== "done" && t.due_at) {
+            syncTaskReminder(user.id, t, true, effectivePrefs.timezone).catch(() => {});
+          }
+        }
+      }
+      if (newSchedules !== undefined && effectivePrefs.notifications.course_schedule) {
+        for (const s of newSchedules) {
+          syncScheduleReminders(user.id, s, true, effectivePrefs.timezone).catch(() => {});
+        }
+      }
+      if (newAgenda !== undefined && effectivePrefs.notifications.agenda_event) {
+        for (const a of newAgenda) {
+          syncAgendaReminder(user.id, a, true, effectivePrefs.timezone).catch(() => {});
+        }
+      }
     },
-    [user, tasks, schedules]
+    [user, tasks, schedules, preferences]
   );
 
   // Derived pending status: whenever auth is loading, logging out, or active user is switching,

@@ -17,8 +17,11 @@ export interface Reminder {
   source_id: string;
   scheduled_at: string; // ISO datetime string (UTC)
   status: ReminderStatus;
+  title: string;
+  body?: string;
   sent_at?: string;
   attempts: number;
+  last_error?: string;
   created_at: string;
   updated_at: string;
 }
