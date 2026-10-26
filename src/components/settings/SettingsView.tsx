@@ -511,7 +511,9 @@ export function SettingsView() {
                 </div>
                 <button
                   type="button"
+                  disabled={!isLoaded || isLogoutPending}
                   onClick={async () => {
+                    if (!isLoaded || isLogoutPending) return;
                     const nextVal = !isEnabled;
                     try {
                       await setNotificationPreference(pref.key, nextVal);
@@ -524,7 +526,9 @@ export function SettingsView() {
                       toast.error(`Gagal mengubah preferensi: ${msg}`);
                     }
                   }}
-                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 ${
+                  className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ${
+                    !isLoaded || isLogoutPending ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+                  } ${
                     isEnabled ? "bg-primary" : "bg-border"
                   }`}
                   aria-label={`Toggle ${pref.label}`}
@@ -706,7 +710,9 @@ export function SettingsView() {
                   <button
                     key={t.value}
                     type="button"
+                    disabled={!isLoaded}
                     onClick={async () => {
+                      if (!isLoaded) return;
                       try {
                         await updatePreferences({ theme: t.value });
                         toast.success(`Tema diubah ke mode ${t.label}.`);
@@ -716,7 +722,9 @@ export function SettingsView() {
                         toast.error(`Gagal mengubah tema: ${msg}`);
                       }
                     }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                      !isLoaded ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+                    } ${
                       isActive
                         ? "bg-primary text-white shadow-sm font-bold"
                         : "text-muted hover:text-foreground"
@@ -744,6 +752,7 @@ export function SettingsView() {
 
             <Select
               value={currentTimezone}
+              disabled={!isLoaded}
               onChange={async (tz) => {
                 const prevTz = currentTimezone;
                 setCurrentTimezone(tz);

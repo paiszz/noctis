@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Settings } from "lucide-react";
 
 const pageTitles: Record<string, string> = {
@@ -22,8 +23,15 @@ export function Header() {
       <div className="flex items-center justify-between h-14 px-4 lg:px-6">
         {/* Mobile: Logo + Menu */}
         <div className="flex items-center gap-3 lg:hidden">
-          <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
-            <span className="text-white font-bold text-xs">N</span>
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-primary to-primary-dark flex items-center justify-center p-1 shadow-sm">
+            <Image
+              src="/noctis-symbol-transparent.png"
+              alt="Noctis"
+              width={20}
+              height={20}
+              className="w-4 h-4 object-contain"
+              priority
+            />
           </div>
           <h1 className="font-semibold text-foreground">{title}</h1>
         </div>

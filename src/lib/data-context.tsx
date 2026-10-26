@@ -216,62 +216,19 @@ interface DataContextType {
   isLoaded: boolean;
 }
 
-function getInitialPreferences(): UserPreferences {
-  if (typeof window === "undefined") {
-    return DEFAULT_PREFERENCES;
-  }
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith("noctis_user_") && key.endsWith("_preferences_v1")) {
-        const raw = localStorage.getItem(key);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed === "object") {
-            return {
-              ...DEFAULT_PREFERENCES,
-              ...parsed,
-              notifications: {
-                ...DEFAULT_PREFERENCES.notifications,
-                ...(parsed.notifications || {}),
-              },
-            };
-          }
-        }
-      }
-    }
-    const rawGuest = localStorage.getItem(LEGACY_STORAGE_KEYS.preferences);
-    if (rawGuest) {
-      const parsed = JSON.parse(rawGuest);
-      if (parsed && typeof parsed === "object") {
-        return {
-          ...DEFAULT_PREFERENCES,
-          ...parsed,
-          notifications: {
-            ...DEFAULT_PREFERENCES.notifications,
-            ...(parsed.notifications || {}),
-          },
-        };
-      }
-    }
-  } catch {
-    // Fallback safely to default preferences
-  }
-  return DEFAULT_PREFERENCES;
-}
-
 const DataContext = createContext<DataContextType | null>(null);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const { user, isLoading: isAuthLoading, isLoggingOut } = useAuth();
 
-  // Initialize with neutral / empty states to eliminate initial render flicker
+  // Initialize with neutral / empty states to eliminate initial render flicker and SSR hydration mismatches
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [schedules, setSchedules] = useState<CourseSchedule[]>([]);
   const [agendaEvents, setAgendaEvents] = useState<AgendaEvent[]>([]);
   const [profile, setProfile] = useState<UserProfile>(EMPTY_PROFILE);
-  const [preferences, setPreferences] = useState<UserPreferences>(getInitialPreferences);
+  const [preferences, setPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
+  const [isPreferencesLoaded, setIsPreferencesLoaded] = useState(false);
 
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [isProfileLoading, setIsProfileLoading] = useState(true);
@@ -290,6 +247,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setSchedules([]);
     setAgendaEvents([]);
     setProfile(EMPTY_PROFILE);
+    setPreferences(DEFAULT_PREFERENCES);
+    setIsPreferencesLoaded(false);
     setIsDataLoading(true);
     setIsProfileLoading(true);
     setIsLoaded(false);
@@ -336,6 +295,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setSchedules([]);
       setAgendaEvents([]);
       setProfile(EMPTY_PROFILE);
+      setPreferences(DEFAULT_PREFERENCES);
+      setIsPreferencesLoaded(false);
     }
 
     if (!user) {
@@ -415,14 +376,38 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
           const storedPrefs = localStorage.getItem(LEGACY_STORAGE_KEYS.preferences);
           if (storedPrefs) {
-            setPreferences(JSON.parse(storedPrefs));
+            try {
+              const parsed = JSON.parse(storedPrefs);
+              if (parsed && typeof parsed === "object") {
+                const resolved: UserPreferences = {
+                  ...DEFAULT_PREFERENCES,
+                  ...parsed,
+                  notifications: {
+                    ...DEFAULT_PREFERENCES.notifications,
+                    ...(parsed.notifications || {}),
+                  },
+                };
+                setPreferences(resolved);
+                try {
+                  localStorage.setItem("noctis_theme_v1", resolved.theme);
+                } catch {}
+              } else {
+                setPreferences(DEFAULT_PREFERENCES);
+              }
+            } catch {
+              setPreferences(DEFAULT_PREFERENCES);
+            }
           } else {
             localStorage.setItem(
               LEGACY_STORAGE_KEYS.preferences,
               JSON.stringify(DEFAULT_PREFERENCES)
             );
             setPreferences(DEFAULT_PREFERENCES);
+            try {
+              localStorage.setItem("noctis_theme_v1", DEFAULT_PREFERENCES.theme);
+            } catch {}
           }
+          setIsPreferencesLoaded(true);
         } catch (err) {
           console.warn("Noctis: Could not read guest data from localStorage", err);
           if (seq === requestSeqRef.current) {
@@ -432,6 +417,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             setAgendaEvents(initialMockAgendaEvents);
             setProfile(DEFAULT_GUEST_PROFILE);
             setPreferences(DEFAULT_PREFERENCES);
+            setIsPreferencesLoaded(true);
           }
         } finally {
           if (seq === requestSeqRef.current) {
@@ -439,6 +425,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             setIsProfileLoading(false);
             setIsLoaded(true);
             isLoadedRef.current = true;
+            setIsPreferencesLoaded(true);
           }
         }
       }
@@ -501,7 +488,26 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
           const cachedPrefs = localStorage.getItem(scopedPreferencesKey);
           if (cachedPrefs) {
-            setPreferences(JSON.parse(cachedPrefs));
+            try {
+              const parsed = JSON.parse(cachedPrefs);
+              if (parsed && typeof parsed === "object") {
+                const resolved: UserPreferences = {
+                  ...DEFAULT_PREFERENCES,
+                  ...parsed,
+                  notifications: {
+                    ...DEFAULT_PREFERENCES.notifications,
+                    ...(parsed.notifications || {}),
+                  },
+                };
+                setPreferences(resolved);
+                setIsPreferencesLoaded(true);
+                try {
+                  localStorage.setItem("noctis_theme_v1", resolved.theme);
+                } catch {}
+              }
+            } catch (err) {
+              console.warn("Noctis: Could not read scoped cache from localStorage", err);
+            }
           }
         } catch (err) {
           console.warn("Noctis: Could not read scoped cache from localStorage", err);
@@ -601,8 +607,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
               },
             };
             setPreferences(resolvedPrefs);
+            setIsPreferencesLoaded(true);
             try {
               localStorage.setItem(scopedPreferencesKey, JSON.stringify(resolvedPrefs));
+              localStorage.setItem("noctis_theme_v1", resolvedPrefs.theme);
             } catch (e) {
               console.warn("Error caching scoped preferences", e);
             }
@@ -617,6 +625,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             setIsProfileLoading(false);
             setIsLoaded(true);
             isLoadedRef.current = true;
+            setIsPreferencesLoaded(true);
           }
         }
       }
@@ -628,6 +637,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // 2. Synchronize theme to document element class list & listen to system theme changes
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!isPreferencesLoaded) return; // Prevent clearing dark mode set by themeScript before stored preferences load
+
     const root = document.documentElement;
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
@@ -651,7 +662,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         mediaQuery.removeEventListener("change", applyTheme);
       };
     }
-  }, [preferences.theme]);
+  }, [preferences.theme, isPreferencesLoaded]);
 
   // ── Profile Actions ──
 
@@ -728,6 +739,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         try {
           const key = getScopedStorageKey(user.id, "preferences");
           localStorage.setItem(key, JSON.stringify(nextPrefs));
+          if (nextPrefs.theme) {
+            localStorage.setItem("noctis_theme_v1", nextPrefs.theme);
+          }
         } catch (e) {
           console.warn("Error caching scoped preferences", e);
         }
@@ -742,6 +756,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           };
           try {
             localStorage.setItem(LEGACY_STORAGE_KEYS.preferences, JSON.stringify(next));
+            if (next.theme) {
+              localStorage.setItem("noctis_theme_v1", next.theme);
+            }
           } catch (e) {
             console.warn("Error saving guest preferences", e);
           }
@@ -1905,6 +1922,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
               LEGACY_STORAGE_KEYS.preferences,
               JSON.stringify(newPrefs)
             );
+            if (newPrefs.theme) {
+              localStorage.setItem("noctis_theme_v1", newPrefs.theme);
+            }
           } catch (e) {
             console.warn("Error saving guest preferences", e);
           }
@@ -2071,6 +2091,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         try {
           const key = getScopedStorageKey(user.id, "preferences");
           localStorage.setItem(key, JSON.stringify(newPrefs));
+          if (newPrefs.theme) {
+            localStorage.setItem("noctis_theme_v1", newPrefs.theme);
+          }
         } catch (e) {
           console.warn("Error caching scoped preferences", e);
         }

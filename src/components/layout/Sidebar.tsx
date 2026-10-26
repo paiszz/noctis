@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
@@ -28,8 +29,15 @@ export function Sidebar() {
     <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 bg-surface border-r border-border z-30">
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 h-16 border-b border-border">
-        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-          <span className="text-white font-bold text-sm">N</span>
+        <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-primary to-primary-dark flex items-center justify-center p-1.5 shadow-sm">
+          <Image
+            src="/noctis-symbol-transparent.png"
+            alt="Noctis"
+            width={24}
+            height={24}
+            className="w-5 h-5 object-contain"
+            priority
+          />
         </div>
         <span className="font-semibold text-lg tracking-tight text-foreground">
           Noctis

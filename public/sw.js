@@ -5,6 +5,8 @@ const CACHE_NAME = 'noctis-pwa-v1';
 
 const PRECACHE_ASSETS = [
   '/manifest.json',
+  '/noctis-app-icon.png',
+  '/noctis-symbol-transparent.png',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
   '/icons/icon-maskable-192x192.png',

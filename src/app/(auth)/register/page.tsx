@@ -2,8 +2,9 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Moon, Eye, EyeOff, Loader2, AlertCircle, MailCheck, CheckCircle2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, AlertCircle, MailCheck, CheckCircle2 } from "lucide-react";
 import { Card, Button } from "@/components/ui";
 import { createBrowserClient } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -152,8 +153,15 @@ export default function RegisterPage() {
     <div className="space-y-6">
       {/* Brand Header */}
       <div className="text-center">
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-primary to-primary-dark flex items-center justify-center mx-auto mb-3 shadow-md">
-          <Moon className="w-7 h-7 text-white fill-white/20" />
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-primary to-primary-dark flex items-center justify-center mx-auto mb-3 shadow-md p-2.5">
+          <Image
+            src="/noctis-symbol-transparent.png"
+            alt="Noctis"
+            width={40}
+            height={40}
+            className="w-8 h-8 object-contain drop-shadow"
+            priority
+          />
         </div>
         <h1 className="text-2xl font-bold text-foreground">Buat Akun Noctis</h1>
         <p className="text-sm text-muted mt-1">

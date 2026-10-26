@@ -34,12 +34,16 @@ export const metadata: Metadata = {
     title: "Noctis",
   },
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+    ],
     apple: "/icons/apple-touch-icon.png",
   },
 };
 
-const themeScript = `(function(){try{var t=null;for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf('noctis_user_')===0&&k.indexOf('_preferences_v1')!==-1){var r=localStorage.getItem(k);if(r){var p=JSON.parse(r);if(p&&p.theme){t=p.theme;break;}}}}if(!t){var rg=localStorage.getItem('noctis_storage_preferences_v1');if(rg){var pg=JSON.parse(rg);if(pg&&pg.theme){t=pg.theme;}}}var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d){document.documentElement.classList.add('dark');}else{document.documentElement.classList.remove('dark');}}catch(e){}})();`;
+const themeScript = `(function(){try{var t=localStorage.getItem('noctis_theme_v1');if(!t){for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf('noctis_user_')===0&&k.indexOf('_preferences_v1')!==-1){var r=localStorage.getItem(k);if(r){var p=JSON.parse(r);if(p&&p.theme){t=p.theme;break;}}}}}if(!t){var rg=localStorage.getItem('noctis_storage_preferences_v1');if(rg){var pg=JSON.parse(rg);if(pg&&pg.theme){t=pg.theme;}}}var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d){document.documentElement.classList.add('dark');}else{document.documentElement.classList.remove('dark');}}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

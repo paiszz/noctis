@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
@@ -9,7 +10,6 @@ import {
   StickyNote,
   CalendarClock,
   Settings,
-  Moon,
   User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -40,7 +40,14 @@ export function Navbar() {
         {/* Brand / Logo */}
         <Link href="/dashboard" className="flex items-center gap-2.5 shrink-0 group">
           <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary to-primary-dark flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
-            <Moon className="w-5 h-5 text-white fill-white/20" />
+            <Image
+              src="/noctis-symbol-transparent.png"
+              alt="Noctis"
+              width={22}
+              height={22}
+              className="w-5.5 h-5.5 object-contain select-none"
+              priority
+            />
           </div>
           <span className="font-bold text-lg sm:text-xl tracking-tight text-foreground">
             Noctis
