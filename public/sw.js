@@ -468,6 +468,26 @@ self.addEventListener('fetch', (event) => {
 });
 
 // 4. Web Push Notification Handlers (PRD v1.2 Foundation)
+
+/**
+ * Sanitizes notification click target URL to prevent open redirect and script injection.
+ * Ensures target destination is strictly an internal path starting with a single '/'
+ * and falls back safely to '/dashboard'.
+ */
+function sanitizeNotificationUrl(rawUrl) {
+  if (typeof rawUrl !== 'string') return '/dashboard';
+  const trimmed = rawUrl.trim();
+  // Must start with '/' and not '//' or '/\' (prevents protocol-relative and scheme-relative escapes)
+  if (!trimmed.startsWith('/') || trimmed.startsWith('//') || trimmed.startsWith('/\\')) {
+    return '/dashboard';
+  }
+  // Reject backslashes or null bytes
+  if (trimmed.includes('\\') || trimmed.includes('\0')) {
+    return '/dashboard';
+  }
+  return trimmed;
+}
+
 self.addEventListener('push', (event) => {
   if (!event.data) return;
 
@@ -484,7 +504,7 @@ self.addEventListener('push', (event) => {
     if (payload.title) title = payload.title;
     if (payload.body) options.body = payload.body;
     if (payload.icon) options.icon = payload.icon;
-    if (payload.url) options.data.url = payload.url;
+    if (payload.url) options.data.url = sanitizeNotificationUrl(payload.url);
   } catch {
     options.body = event.data.text() || options.body;
   }
@@ -494,7 +514,7 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || '/dashboard';
+  const targetUrl = sanitizeNotificationUrl(event.notification.data?.url);
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {

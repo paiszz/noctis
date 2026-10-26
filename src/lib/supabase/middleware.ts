@@ -49,7 +49,12 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
+  const isPublicApiRoute =
+    pathname === '/api/push/vapid-public-key' && request.method === 'GET';
+
+  const isPublicRoute =
+    PUBLIC_ROUTES.some((route) => pathname.startsWith(route)) ||
+    isPublicApiRoute;
 
   // 1. If user is unauthenticated and attempting to visit a private route:
   if (!user && !isPublicRoute) {

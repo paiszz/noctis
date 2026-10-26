@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useRef, useSyncExternalStore } from "react";
+import React, { useState, useRef, useEffect, useSyncExternalStore } from "react";
 import {
   User,
   Bell,
+  BellOff,
   Palette,
   Globe,
   Download,
@@ -15,6 +16,7 @@ import {
   Laptop,
   LogOut,
   ShieldCheck,
+  CheckCircle2,
   Loader2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -24,6 +26,15 @@ import { useData } from "@/lib/data-context";
 import { useAuth } from "@/lib/auth-context";
 import { noctisExportSchema } from "@/lib/validation/import-schema";
 import type { ValidatedNoctisExport } from "@/lib/validation/import-schema";
+import {
+  isWebPushSupported,
+  getVapidPublicKey,
+  getExistingPushSubscription,
+  checkServerPushStatus,
+  registerPushSubscription,
+  unregisterPushSubscription,
+  unregisterPushSubscriptionOnLogout,
+} from "@/lib/push/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -129,6 +140,51 @@ export function SettingsView() {
     setCurrentTimezone(preferences.timezone);
   }
 
+  // Web Push Subscription state
+  const [isPushSupported, setIsPushSupported] = useState(true);
+  const [isPushSubscribed, setIsPushSubscribed] = useState(false);
+  const [isPushLoading, setIsPushLoading] = useState(false);
+  const [isVapidConfigured, setIsVapidConfigured] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function checkPushState() {
+      const supported = isWebPushSupported();
+      if (!isMounted) return;
+      setIsPushSupported(supported);
+
+      if (!supported) return;
+
+      const vapidKey = await getVapidPublicKey();
+      if (!isMounted) return;
+      setIsVapidConfigured(Boolean(vapidKey));
+
+      const sub = await getExistingPushSubscription();
+      if (!isMounted) return;
+
+      if (!sub) {
+        setIsPushSubscribed(false);
+        return;
+      }
+
+      if (user) {
+        const isServerSubscribed = await checkServerPushStatus(sub.endpoint);
+        if (isMounted) {
+          setIsPushSubscribed(isServerSubscribed);
+        }
+      } else {
+        setIsPushSubscribed(false);
+      }
+    }
+
+    checkPushState();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
+
   // ── Handlers ──
 
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -189,6 +245,61 @@ export function SettingsView() {
       }
     } catch {
       toast.error("Gagal meminta izin notifikasi browser.");
+    }
+  };
+
+  const handleEnablePush = async () => {
+    if (!isPushSupported) {
+      toast.error("Browser ini tidak mendukung Web Push Notification.");
+      return;
+    }
+
+    if (!user) {
+      await handleRequestBrowserPermission();
+      toast.info(
+        "Mode Tamu: Notifikasi Web Push di latar belakang memerlukan akun terautentikasi."
+      );
+      return;
+    }
+
+    setIsPushLoading(true);
+    try {
+      const result = await registerPushSubscription();
+      notifyPermissionListeners();
+
+      if (result.success) {
+        setIsPushSubscribed(true);
+        toast.success("Notifikasi Web Push berhasil diaktifkan pada perangkat ini!");
+      } else if (result.conflict) {
+        toast.error(
+          "Konflik subscription browser lama telah dibersihkan. Silakan klik aktifkan sekali lagi."
+        );
+      } else {
+        toast.error(result.error || "Gagal mengaktifkan Web Push.");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Terjadi kesalahan.";
+      toast.error(`Gagal mengaktifkan Web Push: ${msg}`);
+    } finally {
+      setIsPushLoading(false);
+    }
+  };
+
+  const handleDisablePush = async () => {
+    setIsPushLoading(true);
+    try {
+      const result = await unregisterPushSubscription();
+      if (result.success) {
+        setIsPushSubscribed(false);
+        toast.success("Subscription Web Push berhasil dicabut dari perangkat ini.");
+      } else {
+        toast.error(result.error || "Gagal mencabut subscription.");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Terjadi kesalahan.";
+      toast.error(`Gagal mencabut subscription: ${msg}`);
+    } finally {
+      setIsPushLoading(false);
     }
   };
 
@@ -268,6 +379,9 @@ export function SettingsView() {
   const handleConfirmLogout = async () => {
     setIsLoggingOut(true);
     try {
+      // Best-effort cleanup of push subscription on this device before signing out
+      await unregisterPushSubscriptionOnLogout();
+
       await signOut();
       toast.success("Berhasil keluar dari akun.");
       router.replace("/login");
@@ -425,43 +539,135 @@ export function SettingsView() {
             );
           })}
 
-          {/* Browser Permission Block */}
-          <div className="pt-3 border-t border-border/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="space-y-0.5">
-              <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                <Bell className="w-3.5 h-3.5 text-primary" />
-                <span>Izin Notifikasi Browser:</span>
-                <span
-                  className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
-                    browserPermission === "granted"
-                      ? "bg-success-light text-success"
+          {/* Web Push & Browser Permission Block */}
+          <div className="pt-4 border-t border-border/70 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <Bell className="w-3.5 h-3.5 text-primary" />
+                    <span>Status Notifikasi:</span>
+                  </span>
+                  <span
+                    className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                      browserPermission === "granted"
+                        ? "bg-success-light text-success"
+                        : browserPermission === "denied"
+                        ? "bg-danger-light text-danger"
+                        : "bg-surface-muted text-muted-dark border border-border"
+                    }`}
+                  >
+                    {browserPermission === "granted"
+                      ? "Izin Diizinkan"
                       : browserPermission === "denied"
-                      ? "bg-danger-light text-danger"
-                      : "bg-surface-muted text-muted-dark border border-border"
-                  }`}
-                >
-                  {browserPermission === "granted"
-                    ? "Diizinkan"
-                    : browserPermission === "denied"
-                    ? "Diblokir"
-                    : "Belum Diminta"}
-                </span>
-              </p>
-              <p className="text-[11px] text-muted">
-                Push notification di latar belakang memerlukan Service Worker & backend VAPID.
-              </p>
-            </div>
+                      ? "Izin Diblokir"
+                      : "Izin Belum Diminta"}
+                  </span>
+                  {user ? (
+                    <span
+                      className={`text-[11px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 ${
+                        isPushSubscribed
+                          ? "bg-success-light text-success"
+                          : "bg-surface-muted text-muted-dark border border-border"
+                      }`}
+                    >
+                      {isPushSubscribed ? (
+                        <>
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>Web Push Aktif</span>
+                        </>
+                      ) : (
+                        <span>Web Push Belum Aktif</span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-surface-muted text-muted border border-border">
+                      Mode Tamu (Lokal)
+                    </span>
+                  )}
+                </div>
 
-            {browserPermission !== "granted" && browserPermission !== "unsupported" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRequestBrowserPermission}
-                className="shrink-0 text-xs"
-              >
-                Minta Izin Notifikasi
-              </Button>
-            )}
+                <p className="text-[11px] text-muted leading-relaxed">
+                  {!isPushSupported ? (
+                    <span className="text-danger flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      Browser ini tidak mendukung PushManager atau Service Worker.
+                    </span>
+                  ) : browserPermission === "denied" ? (
+                    <span className="text-danger flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      Izin notifikasi diblokir di browser. Aktifkan kembali melalui setelan izin situs browser.
+                    </span>
+                  ) : !user ? (
+                    "Pengingat hanya tampil saat tab Noctis terbuka. Masuk ke akun Anda untuk menerima notifikasi latar belakang."
+                  ) : isVapidConfigured === false ? (
+                    <span className="text-warning flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      Kunci server VAPID belum dikonfigurasi di server Noctis.
+                    </span>
+                  ) : isPushSubscribed ? (
+                    "Perangkat ini terdaftar untuk menerima pengingat jadwal kuliah, tugas, dan agenda dari Noctis."
+                  ) : (
+                    "Daftarkan browser ini agar Anda tetap menerima pengingat penting meski aplikasi sedang ditutup."
+                  )}
+                </p>
+              </div>
+
+              {/* Action buttons */}
+              <div className="shrink-0 flex items-center gap-2">
+                {!user ? (
+                  browserPermission !== "granted" && browserPermission !== "unsupported" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleEnablePush}
+                      className="text-xs"
+                    >
+                      Minta Izin Notifikasi
+                    </Button>
+                  )
+                ) : isPushSubscribed ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isPushLoading}
+                    onClick={handleDisablePush}
+                    className="text-xs text-danger hover:bg-danger-light border-danger/30"
+                    icon={
+                      isPushLoading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <BellOff className="w-3.5 h-3.5 text-danger" />
+                      )
+                    }
+                  >
+                    Cabut Notifikasi
+                  </Button>
+                ) : (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={
+                      isPushLoading ||
+                      !isPushSupported ||
+                      browserPermission === "denied" ||
+                      isVapidConfigured === false
+                    }
+                    onClick={handleEnablePush}
+                    className="text-xs"
+                    icon={
+                      isPushLoading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Bell className="w-3.5 h-3.5" />
+                      )
+                    }
+                  >
+                    Aktifkan Web Push
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </Card>

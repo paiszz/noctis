@@ -1,5 +1,5 @@
 import { createServerClient } from '@supabase/ssr';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { getSupabaseConfig, getSupabaseConfigNotice } from './config';
 
@@ -34,6 +34,33 @@ export async function createClient(): Promise<SupabaseClient | null> {
           // This can be ignored if you have middleware refreshing user sessions.
         }
       },
+    },
+  });
+}
+
+/**
+ * Creates an administrative Supabase client using SUPABASE_SERVICE_ROLE_KEY.
+ * Strictly for server-side operations requiring elevated permissions.
+ * Never exposes the key or client to browser components.
+ * Returns null if SUPABASE_SERVICE_ROLE_KEY or SUPABASE_URL is not configured.
+ */
+export function createAdminClient(): SupabaseClient | null {
+  const { url } = getSupabaseConfig();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+
+  if (
+    !url ||
+    !serviceRoleKey ||
+    serviceRoleKey === 'your-supabase-service-role-key' ||
+    serviceRoleKey.length < 20
+  ) {
+    return null;
+  }
+
+  return createSupabaseClient(url, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
     },
   });
 }
