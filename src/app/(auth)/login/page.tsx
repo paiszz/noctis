@@ -1,21 +1,24 @@
 "use client";
 
-import React, { useState, Suspense } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Card, Button } from "@/components/ui";
 import { createBrowserClient } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { sanitizeRedirectUrl } from "@/lib/utils";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user, isLoading: authLoading } = useAuth();
   const rawRedirectTo = searchParams.get("redirectTo");
   const redirectTo = sanitizeRedirectUrl(rawRedirectTo, "/dashboard");
   const errorCode = searchParams.get("error");
+  const isVerified = searchParams.get("verified") === "true";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,7 +30,39 @@ function LoginForm() {
     }
     return null;
   });
+  const [successMessage, setSuccessMessage] = useState<string | null>(() => {
+    if (isVerified) {
+      return "Email Anda telah berhasil diverifikasi! Silakan masuk dengan kata sandi Anda.";
+    }
+    return null;
+  });
   const [prevErrorCode, setPrevErrorCode] = useState(errorCode);
+
+  // If user is already authenticated (e.g. from callback), redirect directly to dashboard
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.replace(redirectTo);
+    }
+  }, [user, authLoading, router, redirectTo]);
+
+  // Clean up stale query parameters from browser address bar
+  useEffect(() => {
+    if (typeof window !== "undefined" && (errorCode || isVerified)) {
+      const url = new URL(window.location.href);
+      let changed = false;
+      if (url.searchParams.has("error")) {
+        url.searchParams.delete("error");
+        changed = true;
+      }
+      if (url.searchParams.has("verified")) {
+        url.searchParams.delete("verified");
+        changed = true;
+      }
+      if (changed) {
+        window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""));
+      }
+    }
+  }, [errorCode, isVerified]);
 
   // Synchronize error message if errorCode param changes
   if (errorCode !== prevErrorCode) {
@@ -40,6 +75,7 @@ function LoginForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setSuccessMessage(null);
 
     const cleanEmail = email.trim();
     if (!cleanEmail) {
@@ -114,6 +150,13 @@ function LoginForm() {
       {/* Login Card */}
       <Card className="border border-border/70 shadow-card">
         <form onSubmit={handleSubmit} className="space-y-4">
+          {successMessage && (
+            <div className="p-3.5 rounded-xl bg-success-light border border-success/20 text-success text-xs flex items-start gap-2.5">
+              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="leading-relaxed">{successMessage}</div>
+            </div>
+          )}
+
           {errorMessage && (
             <div className="p-3.5 rounded-xl bg-danger-light border border-danger/20 text-danger text-xs flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -138,6 +181,7 @@ function LoginForm() {
               onChange={(e) => {
                 setEmail(e.target.value);
                 if (errorMessage) setErrorMessage(null);
+                if (successMessage) setSuccessMessage(null);
               }}
               placeholder="nama@email.com"
               className="w-full px-3.5 py-2.5 text-sm bg-surface-muted border border-border rounded-xl text-foreground placeholder:text-muted focus:outline-none focus:border-border-focus transition-colors disabled:opacity-60"
@@ -162,6 +206,7 @@ function LoginForm() {
                 onChange={(e) => {
                   setPassword(e.target.value);
                   if (errorMessage) setErrorMessage(null);
+                  if (successMessage) setSuccessMessage(null);
                 }}
                 placeholder="••••••••"
                 className="w-full pl-3.5 pr-10 py-2.5 text-sm bg-surface-muted border border-border rounded-xl text-foreground placeholder:text-muted focus:outline-none focus:border-border-focus transition-colors disabled:opacity-60"

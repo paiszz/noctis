@@ -72,6 +72,8 @@ export async function updateSession(request: NextRequest) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = '/dashboard';
     redirectUrl.searchParams.delete('redirectTo');
+    redirectUrl.searchParams.delete('error');
+    redirectUrl.searchParams.delete('verified');
     return NextResponse.redirect(redirectUrl);
   }
 
