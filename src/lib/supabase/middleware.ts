@@ -44,14 +44,27 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
+  const isCronRoute =
+    pathname === '/api/reminders/process' ||
+    pathname.startsWith('/api/cron');
+
+  // Automated scheduler/cron endpoints manage their own token-based security.
+  // Bypass Supabase user session checks completely for cron routes to prevent unintended redirects.
+  if (isCronRoute) {
+    return NextResponse.next({
+      request: {
+        headers: request.headers,
+      },
+    });
+  }
+
   // IMPORTANT: Do not run auth code between createServerClient and supabase.auth.getUser()
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const isPublicApiRoute =
-    (pathname === '/api/push/vapid-public-key' && request.method === 'GET') ||
-    pathname === '/api/reminders/process';
+    pathname === '/api/push/vapid-public-key' && request.method === 'GET';
 
   const isPublicRoute =
     PUBLIC_ROUTES.some((route) => pathname.startsWith(route)) ||
