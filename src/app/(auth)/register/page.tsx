@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Loader2, AlertCircle, MailCheck, CheckCircle2 } from "lucide-react";
 import { Card, Button } from "@/components/ui";
 import { createBrowserClient } from "@/lib/supabase";
+import { getAuthCallbackUrl } from "@/lib/auth-url";
 import { toast } from "sonner";
 
 export default function RegisterPage() {
@@ -56,7 +57,7 @@ export default function RegisterPage() {
         throw new Error("Koneksi Supabase belum dikonfigurasi.");
       }
 
-      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const emailRedirectTo = getAuthCallbackUrl();
 
       const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
@@ -66,7 +67,7 @@ export default function RegisterPage() {
             name: cleanName,
             title: "Personal Workspace",
           },
-          emailRedirectTo: `${origin}/auth/callback`,
+          emailRedirectTo,
         },
       });
 
