@@ -47,7 +47,8 @@ export function verifySchedulerAuth(request: HeaderProvider): SchedulerAuthResul
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 
-  // Extract token from Authorization Bearer or x-scheduler-secret header
+  // Extract token strictly from Authorization Bearer or x-scheduler-secret header
+  // URL query parameters are deliberately excluded to prevent secret leakage in access logs or referer headers.
   const authHeader = request.headers.get("authorization")?.trim();
   const customHeader = request.headers.get("x-scheduler-secret")?.trim();
 

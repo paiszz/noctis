@@ -12,7 +12,7 @@ const schedulerQuerySchema = z.object({
 /**
  * Executes due reminder batch processing.
  */
-async function handleProcessRequest(request: NextRequest) {
+export async function handleProcessRequest(request: NextRequest) {
   const requestReceivedAt = Date.now();
   const requestIso = new Date(requestReceivedAt).toISOString();
 
@@ -118,4 +118,17 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   return handleProcessRequest(request);
+}
+
+/**
+ * HEAD /api/reminders/process
+ * Connectivity health check without triggering reminder execution.
+ */
+export async function HEAD() {
+  return new Response(null, {
+    status: 200,
+    headers: {
+      "Cache-Control": "no-store, max-age=0",
+    },
+  });
 }

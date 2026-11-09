@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { verifySchedulerAuth } from "../src/lib/reminders/auth.ts";
 import { sanitizeInternalUrl } from "../src/lib/push/send.ts";
@@ -160,6 +160,13 @@ runTest("Scheduler authentication strictly validates token and rejects unauthori
       })
     );
     assert.equal(resValidCronSecret.authorized, true);
+
+    // 7b. Query parameters must NOT be accepted for secret auth (preventing secret leakage in URL logs)
+    const resQueryParamRejected = verifySchedulerAuth({
+      headers: { get: () => null },
+    });
+    assert.equal(resQueryParamRejected.authorized, false);
+    assert.equal(resQueryParamRejected.status, 401);
 
     // 8. When server has no secret configured
     delete process.env.REMINDER_SCHEDULER_SECRET;
@@ -361,6 +368,35 @@ runTest("Middleware permits /api/reminders/process without redirecting to login"
     middlewareContent.includes("pathname === '/api/reminders/process'"),
     "Middleware must allow /api/reminders/process through for server-to-server token authentication"
   );
+  assert.ok(
+    middlewareContent.includes("pathname.startsWith('/api/cron')"),
+    "Middleware must allow /api/cron routes through without redirecting to login"
+  );
+});
+
+runTest("Cron endpoints export HEAD handlers that do not trigger reminder execution", () => {
+  const cronRoutePath = path.join(rootDir, "src", "app", "api", "cron", "reminders", "route.ts");
+  const processRoutePath = path.join(rootDir, "src", "app", "api", "reminders", "process", "route.ts");
+
+  assert.ok(fs.existsSync(cronRoutePath), "Route file src/app/api/cron/reminders/route.ts must exist");
+  assert.ok(fs.existsSync(processRoutePath), "Route file src/app/api/reminders/process/route.ts must exist");
+
+  const cronContent = fs.readFileSync(cronRoutePath, "utf-8");
+  const processContent = fs.readFileSync(processRoutePath, "utf-8");
+
+  assert.ok(cronContent.includes("export async function HEAD"), "Cron route must export HEAD handler");
+  assert.ok(processContent.includes("export async function HEAD"), "Process route must export HEAD handler");
+
+  // HEAD handler must only return 200 connectivity response without calling handleProcessRequest or processing reminders
+  const cronHeadBody = cronContent.match(/export async function HEAD\(\)[^{]*{([^}]*)}/)?.[1] || "";
+  const processHeadBody = processContent.match(/export async function HEAD\(\)[^{]*{([^}]*)}/)?.[1] || "";
+
+  assert.ok(!cronHeadBody.includes("handleProcessRequest"), "HEAD on /api/cron/reminders must not call handleProcessRequest");
+  assert.ok(!cronHeadBody.includes("processDueReminders"), "HEAD on /api/cron/reminders must not call processDueReminders");
+  assert.ok(!processHeadBody.includes("handleProcessRequest"), "HEAD on /api/reminders/process must not call handleProcessRequest");
+  assert.ok(!processHeadBody.includes("processDueReminders"), "HEAD on /api/reminders/process must not call processDueReminders");
+  assert.ok(cronHeadBody.includes("status: 200"), "HEAD on /api/cron/reminders must return status 200");
+  assert.ok(processHeadBody.includes("status: 200"), "HEAD on /api/reminders/process must return status 200");
 });
 
 // ==============================================================================
